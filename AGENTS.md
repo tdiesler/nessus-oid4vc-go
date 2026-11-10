@@ -39,6 +39,11 @@ current as new conventions get established.
 - Prefer new commits over amending once a commit has been pushed.
 - Commit messages for commits with multiple notable changes: one short
   bullet per point, not prose paragraphs.
+- **Major commits**: associated with a GitHub issue, title is the issue's
+  title verbatim plus its number, e.g. `Do stuff (#123)`.
+- **Minor commits**: made on a feature branch while working an issue, title
+  starts with `--`, e.g. `-- do this`. Minor commits get squashed into one
+  major commit before merging.
 
 ## Project tracking
 
