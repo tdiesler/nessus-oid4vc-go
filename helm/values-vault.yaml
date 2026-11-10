@@ -1,0 +1,14 @@
+#
+# helm upgrade --kube-context=rancher-desktop --install vault ./helm -f ./helm/values-vault.yaml
+#
+environment: dev
+
+deployments:
+
+  # Vault Service (dev mode)
+  #
+  vault:
+    image: "hashicorp/vault"
+    version: "latest"
+    nodePort: 30820
+    pullPolicy: IfNotPresent

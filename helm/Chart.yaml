@@ -1,0 +1,4 @@
+apiVersion: v2
+name: nessus-oid4vc-go
+description: A Helm chart to deploy a dev-mode Vault for the OID4VC issuer POC
+version: 0.1.0
