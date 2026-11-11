@@ -33,17 +33,19 @@ current as new conventions get established.
 
 ## Git
 
+- Never `git commit` (including amending) unless explicitly told to in that
+  message. Finishing a piece of work does not imply permission to commit it.
 - Never `git push` (including force variants) without the user's explicit,
   per-action confirmation in that message. Amending a commit changes the
   local commit only and does not imply permission to push.
 - Prefer new commits over amending once a commit has been pushed.
 - Commit messages for commits with multiple notable changes: one short
   bullet per point, not prose paragraphs.
-- **Major commits**: associated with a GitHub issue, title is the issue's
-  title verbatim plus its number, e.g. `Do stuff (#123)`.
-- **Minor commits**: made on a feature branch while working an issue, title
-  starts with `--`, e.g. `-- do this`. Minor commits get squashed into one
-  major commit before merging.
+- Work an issue on its own feature branch using **minor commits**: title
+  starts with `--`, e.g. `-- do this`.
+- A **major commit** is that feature branch's minor commits squashed into a
+  single commit and merged to `main`. Its title is the issue's title
+  verbatim plus its number, e.g. `Do stuff (#123)`.
 
 ## Project tracking
 
