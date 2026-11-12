@@ -81,7 +81,7 @@ func LogF(level slog.Level, format string, args ...any) {
 }
 
 // GetStackFrames extracts the stack trace lines from a "%+v"-formatted
-// error (e.g. from github.com/pkg/errors), skipping frames inside this file.
+// error, skipping frames inside this file.
 func GetStackFrames(err error) []string {
 	buf := &strings.Builder{}
 	_, _ = fmt.Fprintf(buf, "%+v", err)

@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+readonly ROLE_ISSUER="issuer"
+readonly ROLE_HOLDER="holder"
+readonly ROLE_VERIFIER="verifier"
+
 EXTERNAL_IP="${EXTERNAL_IP:-localhost}"
 export VAULT_ADDR="http://${EXTERNAL_IP}:30820"
 
@@ -20,6 +24,29 @@ vault secrets disable secret >/dev/null 2>&1 || true
 
 echo "Resetting userpass auth method ..."
 vault auth disable userpass >/dev/null 2>&1 || true
+
+echo "Resetting policy 'issuer-mint' ..."
+vault policy delete issuer-mint >/dev/null 2>&1 || true
+
+echo "Resetting token role 'issuer-mint' ..."
+vault delete auth/token/roles/issuer-mint >/dev/null 2>&1 || true
+
+echo "Resetting per-subject claims policies ..."
+for p in $(vault policy list -format=json 2>/dev/null | jq -r '.[] | select(startswith("subject-claims-"))'); do
+  vault policy delete "${p}" >/dev/null 2>&1 || true
+done
+
+echo "Resetting OIDC provider 'oid4vc' ..."
+vault delete identity/oidc/provider/oid4vc >/dev/null 2>&1 || true
+
+echo "Resetting OIDC client 'oid4vc-client' ..."
+vault delete identity/oidc/client/oid4vc-client >/dev/null 2>&1 || true
+
+echo "Resetting OIDC scope 'profile' ..."
+vault delete identity/oidc/scope/profile >/dev/null 2>&1 || true
+
+echo "Resetting OIDC key 'oid4vci' ..."
+vault delete identity/oidc/key/oid4vci >/dev/null 2>&1 || true
 
 echo "Resetting identity entities ..."
 for id in $(vault list -format=json identity/entity/id 2>/dev/null | jq -r '.[]'); do
@@ -56,18 +83,102 @@ path "secret/data/subjects/{{identity.entity.name}}" {
 }
 EOF
 
-create_subject() {
-  local username="$1"
-  local first_name="$2"
-  local family_name="$3"
-  local email="$4"
+# Issue #13: delegated pre-authorized-code minting. Max (the issuer persona)
+# can mint a code for Alice without ever holding read access to her claims
+# himself, and without Vault trying (and failing, see #5's history with
+# `allowed_entity_aliases`) to bind a new token to Alice's existing entity.
+#
+# Instead: each subject gets their own named, literal-path policy
+# (`subject-claims-<username>`, written in create_user below) alongside
+# their self-service `subject-self` policy. A token role scopes *which*
+# policies are ever grantable through it (`allowed_policies_glob`), and Max
+# only needs the right to invoke that role — not the target policy itself.
+# Minting is then just `vault write -wrap-ttl=... auth/token/create/issuer-mint
+# policies=subject-claims-alice`, and redemption is `vault unwrap`: the
+# result is a real Vault token, scoped to exactly that one subject's claims,
+# with Vault itself handling single-use/TTL/opacity.
+#
+echo "Writing policy 'issuer-mint' ..."
+vault policy write issuer-mint - >/dev/null <<'EOF'
+path "auth/token/create/issuer-mint" {
+  capabilities = ["create", "update"]
+}
+EOF
 
-  echo "Creating user '${username}' ..."
-  vault write "auth/userpass/users/${username}" password="password" token_policies="subject-self" >/dev/null
+echo "Writing token role 'issuer-mint' ..."
+vault write auth/token/roles/issuer-mint \
+  allowed_policies_glob="subject-claims-*" \
+  orphan=true \
+  token_type=service \
+  explicit_max_ttl=1h >/dev/null
+
+# OIDC Identity Provider: Vault acting as the OAuth/OIDC Authorization
+# Server for the plain Authorization Code flow (issue #13's other bullet).
+# Unlike pre-authorized code, this is inherently self-service — whoever's
+# own Vault token is presented at /authorize is who the code is issued to.
+#
+echo "Creating OIDC signing key 'oid4vci' ..."
+vault write identity/oidc/key/oid4vci allowed_client_ids="*" algorithm=RS256 >/dev/null
+
+echo "Writing OIDC scope 'profile' ..."
+vault write identity/oidc/scope/profile \
+  description="Subject profile claims" \
+  template='{"firstName": {{identity.entity.metadata.firstName}}, "familyName": {{identity.entity.metadata.familyName}}, "email": {{identity.entity.metadata.email}}}' >/dev/null
+
+echo "Registering OIDC client 'oid4vc-client' ..."
+vault write identity/oidc/client/oid4vc-client \
+  redirect_uris="http://localhost:8400/callback" \
+  assignments="allow_all" \
+  key="oid4vci" \
+  id_token_ttl=1h \
+  access_token_ttl=1h >/dev/null
+
+# `vault write` on this endpoint returns no data — read it back separately.
+OIDC_CLIENT="$(vault read -format=json identity/oidc/client/oid4vc-client)"
+OIDC_CLIENT_ID="$(echo "${OIDC_CLIENT}" | jq -r '.data.client_id')"
+OIDC_CLIENT_SECRET="$(echo "${OIDC_CLIENT}" | jq -r '.data.client_secret')"
+
+echo "Creating OIDC provider 'oid4vc' ..."
+vault write identity/oidc/provider/oid4vc \
+  allowed_client_ids="*" \
+  scopes_supported="profile" \
+  issuer="${VAULT_ADDR}" >/dev/null
+
+# Functions ------------------------------------------------------------------------------------------------------------
+
+create_user() {
+  local role="$1"
+  local username="$2"
+  local first_name="$3"
+  local family_name="$4"
+  local email="$5"
+
+  case "${role}" in
+    "${ROLE_ISSUER}")
+      echo "Creating issuer user '${username}' ..."
+      vault write "auth/userpass/users/${username}" password="password" token_policies="issuer-mint" >/dev/null
+      ;;
+    "${ROLE_HOLDER}")
+      echo "Creating holder user '${username}' ..."
+      vault write "auth/userpass/users/${username}" password="password" token_policies="subject-self" >/dev/null
+      ;;
+    "${ROLE_VERIFIER}")
+      # Placeholder: no dedicated policy yet (OID4VP verifier work isn't scoped).
+      echo "Creating verifier user '${username}' ..."
+      vault write "auth/userpass/users/${username}" password="password" >/dev/null
+      ;;
+    *)
+      echo "create_user: unknown role '${role}' (want ${ROLE_ISSUER}|${ROLE_HOLDER}|${ROLE_VERIFIER})" >&2
+      exit 1
+      ;;
+  esac
 
   echo "Creating identity entity '${username}' ..."
   local entity_id
-  entity_id="$(vault write -field=id -f identity/entity name="${username}")"
+  entity_id="$(vault write -field=id -f identity/entity name="${username}" \
+    metadata=firstName="${first_name}" \
+    metadata=familyName="${family_name}" \
+    metadata=email="${email}")"
 
   echo "Creating identity alias for '${username}' ..."
   vault write -f identity/entity-alias \
@@ -75,27 +186,106 @@ create_subject() {
     canonical_id="${entity_id}" \
     mount_accessor="${USERPASS_ACCESSOR}" >/dev/null
 
-  echo "Writing claims for '${username}' ..."
-  vault kv put "secret/subjects/${username}" \
-    firstName="${first_name}" \
-    familyName="${family_name}" \
-    email="${email}" \
-    id="${username}" >/dev/null
+  if [ "${role}" = "${ROLE_HOLDER}" ]; then
+    echo "Writing claims for '${username}' ..."
+    vault kv put "secret/subjects/${username}" \
+      firstName="${first_name}" \
+      familyName="${family_name}" \
+      email="${email}" \
+      id="${username}" >/dev/null
+
+    echo "Writing policy 'subject-claims-${username}' ..."
+    vault policy write "subject-claims-${username}" - >/dev/null <<EOF
+path "secret/data/subjects/${username}" {
+  capabilities = ["read"]
+}
+EOF
+  fi
 }
 
-# Demo subject, matching the sibling nessus-oid4vc project's "alice" persona
+# Decode a JWT's payload (base64url, unpadded) to JSON.
 #
-create_subject "alice" "Alice" "Wonderland" "alice@email.com"
+decode_jwt_payload() {
+  local payload
+  payload="$(echo "$1" | cut -d. -f2 | tr '_-' '/+')"
+  case $(( ${#payload} % 4 )) in
+    2) payload="${payload}==" ;;
+    3) payload="${payload}=" ;;
+  esac
+  echo "${payload}" | base64 -d
+}
 
-# Demonstrate: alice logs in with her own credentials and reads her own
-# claims — no root token involved.
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Holder persona: Alice
+#
+create_user "${ROLE_HOLDER}" "alice" "Alice" "Wonderland" "alice@email.com"
+
+#
+# Issuer persona: Max, who will mint pre-authorized codes for holders.
+#
+create_user "${ROLE_ISSUER}" "max" "Max" "Mustermann" "max@email.com"
+
+# Demonstrate: Alice drives a standard OAuth 2.0 Authorization Code flow
+# against Vault's own OIDC provider, and ends up viewing her own claims via
+# the resulting OAuth tokens — not via a raw Vault API call.
 #
 echo
-echo "Logging in as 'alice' ..."
+echo "Logging in as 'Alice' ..."
 ALICE_TOKEN="$(vault login -method=userpass -token-only username=alice password=password)"
 
-echo "Fetching alice's own claims ..."
-VAULT_TOKEN="${ALICE_TOKEN}" vault kv get secret/subjects/alice
+echo "Alice starts the OAuth Authorization Code flow at Vault's OIDC provider ..."
+AUTHORIZE_RESPONSE="$(curl -s -H "X-Vault-Token: ${ALICE_TOKEN}" \
+  "${VAULT_ADDR}/v1/identity/oidc/provider/oid4vc/authorize?client_id=${OIDC_CLIENT_ID}&response_type=code&scope=openid%20profile&redirect_uri=http://localhost:8400/callback")"
+
+AUTH_CODE="$(echo "${AUTHORIZE_RESPONSE}" | jq -r '.code // empty')"
+if [ -z "${AUTH_CODE}" ]; then
+  echo "Did not get an authorization code. Full response:"
+  echo "${AUTHORIZE_RESPONSE}"
+  exit 1
+fi
+echo "Authorization code: ${AUTH_CODE}"
+
+echo "Exchanging the code for tokens at Vault's OIDC token endpoint ..."
+TOKEN_RESPONSE="$(curl -s -u "${OIDC_CLIENT_ID}:${OIDC_CLIENT_SECRET}" \
+  --data-urlencode grant_type=authorization_code \
+  --data-urlencode "code=${AUTH_CODE}" \
+  --data-urlencode "redirect_uri=http://localhost:8400/callback" \
+  "${VAULT_ADDR}/v1/identity/oidc/provider/oid4vc/token")"
+
+ID_TOKEN="$(echo "${TOKEN_RESPONSE}" | jq -r '.id_token')"
+OAUTH_ACCESS_TOKEN="$(echo "${TOKEN_RESPONSE}" | jq -r '.access_token')"
+
+echo "Alice's ID token claims (her profile, delivered via OAuth, not a direct KV read):"
+decode_jwt_payload "${ID_TOKEN}" | jq '{sub, firstName, familyName, email}'
+
+echo "Same claims again via the OIDC userinfo endpoint, using the OAuth access token:"
+curl -s -H "Authorization: Bearer ${OAUTH_ACCESS_TOKEN}" \
+  "${VAULT_ADDR}/v1/identity/oidc/provider/oid4vc/userinfo" | jq '{sub, firstName, familyName, email}'
+
+# Demonstrate: Max, who holds no access to Alice's claims himself, mints a
+# pre-authorized code for her via the issuer-mint role; whoever redeems it
+# gets a real, single-use Vault token scoped to exactly her claims — no
+# entity binding, no privileged credential needed on max's part beyond the
+# right to invoke this one role.
+#
+echo
+echo "Logging in as 'max' ..."
+MAX_TOKEN="$(vault login -method=userpass -token-only username=max password=password)"
+
+echo "Max mints a wrapped, single-use pre-authorized code scoped to Alice's claims ..."
+PREAUTH_CODE="$(VAULT_TOKEN="${MAX_TOKEN}" vault write -wrap-ttl=5m -format=json \
+  auth/token/create/issuer-mint policies=subject-claims-alice ttl=1h renewable=false \
+  | jq -r '.wrap_info.token')"
+echo "Pre-authorized code: ${PREAUTH_CODE}"
+
+echo
+echo "Redeeming the code (this is what the issuer service's /token endpoint will do) ..."
+REDEEMED_TOKEN="$(vault unwrap -format=json "${PREAUTH_CODE}" | jq -r '.auth.client_token')"
+echo "Redeemed token's policies: $(vault token lookup -format=json "${REDEEMED_TOKEN}" | jq -c '.data.policies')"
+
+echo "Fetching Alice's claims using the redeemed token, to prove delegated minting works end-to-end ..."
+VAULT_TOKEN="${REDEEMED_TOKEN}" vault kv get -mount=secret subjects/alice
 
 echo
 echo "Vault setup complete"

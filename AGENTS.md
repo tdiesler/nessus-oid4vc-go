@@ -15,6 +15,17 @@ current as new conventions get established.
 - Confirmed POC defaults: **SD-JWT VC** credential format,
   **pre-authorized code** issuance flow, **1:1** Vault Identity entity to
   credential subject mapping.
+- Wallets only ever talk to our issuer service — never directly to Vault,
+  even where Vault exposes a usable raw endpoint (e.g. its own OIDC Provider,
+  or `sys/wrapping/unwrap`). Reasons: (1) Vault has no concept of OID4VCI
+  credentials, the `pre-authorized_code` grant, or issuer metadata — those
+  only exist in our service, so a generic wallet has to talk to us for them
+  regardless; (2) Vault is normally an internal/sensitive system and
+  shouldn't be made directly reachable by arbitrary public wallets just
+  because one grant type happens to be implementable that way. Even flows
+  we could technically proxy straight through to Vault (e.g. Authorization
+  Code against Vault's OIDC Provider) stay fronted by our service, so
+  wallets see one consistent contract.
 
 ## Dependency choices
 
@@ -24,12 +35,36 @@ current as new conventions get established.
   third-party SD-JWT VC library. Vault Transit signs remotely, so a
   pluggable `Signer` interface is needed regardless of library choice.
 
+## Go conventions
+
+- Every struct `Foo` gets a constructor `NewFoo(...)`. For services, it
+  returns `(*Foo, error)` and validates required fields; for plain value
+  types, it returns `Foo` (no error) when there's nothing to validate.
+  Callers — including our own code within the package — always go through
+  `NewFoo`, never a `Foo{...}` struct literal.
+
 ## Testing
 
-- Run plain, fast, in-process unit tests freely.
-- Anything that needs a real Vault (e.g. `vault server -dev`), Docker, or
-  another live service is not run by the agent — document the manual steps
-  (e.g. in the README) and hand verification to the user.
+- No Vault mocks/fakes: confidence in "this works against Vault" only comes
+  from actually talking to Vault. Any test for functionality we claim to
+  support (KV reads, Transit signing, identity/entity lookups, token
+  issuance, ...) is an integration test that runs against a real Vault —
+  the local dev instance (`scripts/vault-setup`'s target), not an in-memory
+  fake implementing the client interface.
+- Keep integration tests from stepping on each other without relying on
+  Vault namespaces (OSS/OpenBao doesn't have them): each test uses its own
+  uniquely-named entity/KV path (e.g. derived from `t.Name()` or a random
+  suffix) and tears it down via `t.Cleanup`, rather than depending on
+  `scripts/vault-setup`'s full reset.
+- Plain, fast, in-process unit tests with no external dependency (e.g. the
+  pre-authorized-code store's expiry/single-use logic) stay as such — not
+  everything needs Vault.
+- The agent may access the local dev Vault instance directly (CLI, curl, Go
+  tests) and is expected to for anything above — be practical about it,
+  including the token overhead of doing so. Flag it rather than dumping a
+  verbose response when output would be expensive to process. Docker,
+  Kubernetes, or any other live/deployed service beyond this local dev
+  Vault stays off-limits per the user's global instructions.
 
 ## Git
 
