@@ -17,6 +17,8 @@ var wellKnownSuffixes = []string{
 	"/.well-known/oauth-authorization-server",
 }
 
+// AuthorizationServerMetadata =========================================================================================
+
 // AuthorizationServerMetadata is the subset of an authorization server's
 // discovery document the issuer service needs to locate its endpoints,
 // rather than assuming hardcoded paths.
@@ -28,6 +30,8 @@ type AuthorizationServerMetadata struct {
 	JwksUri               string   `json:"jwks_uri"`
 	ScopesSupported       []string `json:"scopes_supported"`
 }
+
+// WellKnownAccessor ===================================================================================================
 
 // WellKnownAccessor fetches an authorization server's metadata document.
 type WellKnownAccessor struct {

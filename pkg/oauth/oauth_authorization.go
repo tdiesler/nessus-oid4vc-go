@@ -94,6 +94,7 @@ func (s *OAuthAuthorizationAccessor) CodeFlowAuthorization(client, scope, userna
 		return "", err
 	}
 
+	// Discover the authorization endpoint.
 	discovery, err := NewWellKnownAccessor()
 	if err != nil {
 		return "", err
@@ -103,15 +104,18 @@ func (s *OAuthAuthorizationAccessor) CodeFlowAuthorization(client, scope, userna
 		return "", fmt.Errorf("discover authorization server metadata: %w", err)
 	}
 
+	// Resolve the client's id.
 	clientId, err := oid4vci.DiscoverClientId(client)
 	if err != nil {
 		return "", err
 	}
 
+	// Build the Authorization Request.
 	authReq := NewOAuthAuthorizationRequest(metadata.AuthorizationEndpoint, clientId).
 		WithRedirectUri(cfg.RedirectURI).
 		WithScope(scope)
 
+	// Complete it interactively, as a wallet's user-agent would.
 	authorizer, err := NewChromeAuthorizer()
 	if err != nil {
 		return "", err

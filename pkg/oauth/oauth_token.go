@@ -39,15 +39,18 @@ func NewOAuthTokenRequest(endpoint, code, redirectUri, clientId, clientSecret st
 // Send performs the Access Token Request and returns the resulting tokens.
 func (r *OAuthTokenRequest) Send(httpClient *http.Client) (*OAuthTokenResponse, error) {
 
+	// Build the Access Token Request's form body.
 	form := url.Values{}
 	form.Set("grant_type", r.GrantType)
 	form.Set("code", r.Code)
 	form.Set("redirect_uri", r.RedirectUri)
 
+	// Authenticate as the client, when credentials are available.
 	if r.ClientId != "" && r.ClientSecret != "" {
 		r.WithBasicAuth(r.ClientId, r.ClientSecret)
 	}
 
+	// Redeem the code.
 	token, err := r.Post[OAuthTokenResponse](httpClient, form)
 	if err != nil {
 		return nil, err
@@ -66,6 +69,8 @@ type OAuthTokenResponse struct {
 	IdToken     string `json:"id_token"`
 	ExpiresIn   int    `json:"expires_in"`
 }
+
+// OAuthTokenAccessor ==================================================================================================
 
 // OAuthTokenAccessor accesses an authorization server's token endpoint,
 // e.g. to redeem an authorization code for tokens.
@@ -90,6 +95,7 @@ func NewOAuthTokenAccessor() (*OAuthTokenAccessor, error) {
 // client's discovered authorization server token endpoint.
 func (a *OAuthTokenAccessor) ExchangeAuthorizationCode(clientName, code, redirectUri string) (*OAuthTokenResponse, error) {
 
+	// Discover the token endpoint.
 	discovery, err := NewWellKnownAccessor()
 	if err != nil {
 		return nil, err
@@ -99,6 +105,7 @@ func (a *OAuthTokenAccessor) ExchangeAuthorizationCode(clientName, code, redirec
 		return nil, fmt.Errorf("discover authorization server metadata: %w", err)
 	}
 
+	// Resolve the client's credentials.
 	clientId, err := oid4vci.DiscoverClientId(clientName)
 	if err != nil {
 		return nil, err
@@ -108,6 +115,7 @@ func (a *OAuthTokenAccessor) ExchangeAuthorizationCode(clientName, code, redirec
 		return nil, err
 	}
 
+	// Redeem the code.
 	req := NewOAuthTokenRequest(metadata.TokenEndpoint, code, redirectUri, clientId, clientSecret)
 	return req.Send(a.httpClient)
 }

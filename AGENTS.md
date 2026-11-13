@@ -10,6 +10,12 @@ current as new conventions get established.
   tradeoffs with the user first, and agree on an approach before implementing it.
   An initial request to work on an issue authorizes investigation and discussion;
   it does not by itself authorize choosing and implementing an approach.
+- This discuss-first rule is for substantive work: design/approach choices, new
+  abstractions, behavior changes, or anything where a reasonable person could
+  disagree on the right shape. It does not apply to trivial, obvious fixes with
+  a single reasonable resolution (typos, mislabeled section banners, missing
+  doc-convention markers, misplaced test fixtures, grammar nits) — just make
+  those and mention what was done.
 - In prose, surround em dashes with spaces (`word — word`).
 - Treat user suggestions as hypotheses to evaluate, not decisions to affirm
   automatically. Check them against the stated objective, current evidence,
@@ -89,8 +95,18 @@ current as new conventions get established.
   the same file where appropriate.
 - Add new `Test*` functions in alphabetical order by name.
 - In `*_test.go` files, place all `Test*` functions before private support
-  code. Put private test structures, fixtures, and helper functions below a
-  `// Private ---...` marker.
+  code. Put private (unexported) test structures, fixtures, and helper
+  functions below a `// Private ---...` marker. Exported fixtures/constants
+  are not private support code: they stay at the top of the file, same as
+  any other exported package-level declaration.
+- Don't itemize another file's or script's specific details in a doc comment
+  (e.g. naming exact resource names a test assumes some other file already
+  set up). State what the code does and that it depends on pre-existing
+  setup, without restating the setup's specifics — those go stale the moment
+  the other file changes, silently. A comment noting the *provenance* of a
+  specific value (e.g. "fixed by scripts/vault-setup's client registration"
+  next to a literal) is fine; restating a list of facts that live elsewhere
+  is not.
 
 ## Testing
 

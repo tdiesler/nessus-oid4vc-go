@@ -44,6 +44,7 @@ func (c *ChromeAuthorizer) Authorize(req *OAuthAuthorizationRequest, username, p
 		return "", fmt.Errorf("parse redirect_uri %q: %w", req.RedirectUri, err)
 	}
 
+	// Listen for the redirect_uri callback that carries the authorization code.
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 	srv := &http.Server{
@@ -65,6 +66,7 @@ func (c *ChromeAuthorizer) Authorize(req *OAuthAuthorizationRequest, username, p
 	go func() { _ = srv.Serve(ln) }()
 	defer func() { _ = srv.Close() }()
 
+	// Launch the browser.
 	allocOpts := chromedp.DefaultExecAllocatorOptions[:]
 	if path := chromeExecPath(); path != "" {
 		allocOpts = append(allocOpts, chromedp.ExecPath(path))
@@ -84,15 +86,20 @@ func (c *ChromeAuthorizer) Authorize(req *OAuthAuthorizationRequest, username, p
 		sel.dispatchEvent(new Event('change', {bubbles: true}));
 	})()`
 
+	// Load the login page.
 	if err := chromedp.Do(ctx,
 		chromedp.Navigate(req.ToRequestUrl()),
 		chromedp.WaitVisible(chromedp.CSS(`select[name="selectedAuthMethod"]`)),
 	); err != nil {
 		return "", fmt.Errorf("load Vault login page: %w", err)
 	}
+
+	// Switch its auth method to userpass.
 	if _, err := chromedp.Run(ctx, chromedp.Evaluate[any](selectUserpassJS)); err != nil {
 		return "", fmt.Errorf("select userpass auth method: %w", err)
 	}
+
+	// Fill in and submit the credentials.
 	if err := chromedp.Do(ctx,
 		chromedp.WaitVisible(chromedp.CSS(`input[name="username"]`)),
 		chromedp.SendKeys(chromedp.CSS(`input[name="username"]`), username),
@@ -102,6 +109,7 @@ func (c *ChromeAuthorizer) Authorize(req *OAuthAuthorizationRequest, username, p
 		return "", fmt.Errorf("submit Vault login form: %w", err)
 	}
 
+	// Wait for the callback to carry the code, an error, or time out.
 	select {
 	case code := <-codeCh:
 		return code, nil

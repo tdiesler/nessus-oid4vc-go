@@ -6,6 +6,8 @@ import (
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/utils"
 )
 
+// UserInfoAccessor ====================================================================================================
+
 // UserInfoAccessor accesses an authorization server's UserInfo endpoint
 // (OIDC Core 1.0 §5.3): an OAuth 2.0 protected resource that returns claims
 // about the authenticated end-user, given a valid access token.
