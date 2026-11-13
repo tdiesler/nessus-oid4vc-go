@@ -1,3 +1,4 @@
 Vault:
   Addr: http://192.168.0.30:30820
+  OIDCProvider: oid4vc
   # RootToken: <VAULT_ROOT_TOKEN>

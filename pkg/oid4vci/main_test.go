@@ -1,11 +1,15 @@
 package oid4vci
 
 import (
+	"os"
 	"testing"
 
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/config"
 )
 
-func MainTest(t *testing.T) {
-	config.GetAppConfig()
+func TestMain(m *testing.M) {
+
+	config.SetupHomeDir()
+
+	os.Exit(m.Run())
 }

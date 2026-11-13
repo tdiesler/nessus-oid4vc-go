@@ -9,8 +9,9 @@ import (
 )
 
 type AppConfig struct {
-	VaultAddr string
-	RootToken string
+	VaultAddr    string
+	RootToken    string
+	OIDCProvider string
 }
 
 func NewAppConfig() (*AppConfig, error) {
@@ -29,8 +30,9 @@ func NewAppConfig() (*AppConfig, error) {
 	}
 
 	appcfg := &AppConfig{
-		VaultAddr: v.GetString("Vault.Addr"),
-		RootToken: v.GetString("Vault.RootToken"),
+		VaultAddr:    v.GetString("Vault.Addr"),
+		RootToken:    v.GetString("Vault.RootToken"),
+		OIDCProvider: v.GetString("Vault.OIDCProvider"),
 	}
 	if appcfg.VaultAddr == "" {
 		return nil, fmt.Errorf("config: Vault.Addr is required (set it in %s or VAULT_ADDR)", v.ConfigFileUsed())
