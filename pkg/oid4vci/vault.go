@@ -37,3 +37,45 @@ func RootClient() (*api.Client, error) {
 	client.SetToken(appcfg.RootToken)
 	return client, nil
 }
+
+// DiscoverClientId provides general mapping from a client's name to its client_id.
+func DiscoverClientId(clientName string) (string, error) {
+	client, err := RootClient()
+	if err != nil {
+		return "", err
+	}
+
+	secret, err := client.Logical().Read("identity/oidc/client/" + clientName)
+	if err != nil {
+		return "", fmt.Errorf("read oidc client %q: %w", clientName, err)
+	}
+	if secret == nil {
+		return "", fmt.Errorf("oidc client %q not found", clientName)
+	}
+	clientId, ok := secret.Data["client_id"].(string)
+	if !ok || clientId == "" {
+		return "", fmt.Errorf("oidc client %q has no client_id", clientName)
+	}
+	return clientId, nil
+}
+
+// DiscoverClientSecret provides general mapping from a client's name to its client_secret.
+func DiscoverClientSecret(clientName string) (string, error) {
+	client, err := RootClient()
+	if err != nil {
+		return "", err
+	}
+
+	secret, err := client.Logical().Read("identity/oidc/client/" + clientName)
+	if err != nil {
+		return "", fmt.Errorf("read oidc client %q: %w", clientName, err)
+	}
+	if secret == nil {
+		return "", fmt.Errorf("oidc client %q not found", clientName)
+	}
+	clientSecret, ok := secret.Data["client_secret"].(string)
+	if !ok || clientSecret == "" {
+		return "", fmt.Errorf("oidc client %q has no client_secret", clientName)
+	}
+	return clientSecret, nil
+}

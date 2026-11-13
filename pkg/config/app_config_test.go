@@ -11,5 +11,7 @@ func TestAppConfigLoading(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "http://192.168.0.30:30820", cfg.VaultAddr)
 	require.NotEmptyf(t, cfg.RootToken, "no root token")
-	require.Equal(t, "oid4vc", cfg.OIDCProvider)
+	require.Equal(t, "oid4vc-client", cfg.OidcClient)
+	require.Equal(t, "oid4vc", cfg.OidcProvider)
+	require.Equal(t, "http://localhost:8400/callback", cfg.RedirectURI)
 }

@@ -3,6 +3,8 @@ module github.com/tdiesler/nessus-oid4vc-go
 go 1.27.3
 
 require (
+	github.com/chromedp/chromedp v0.23.0
+	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/viper v1.21.0
@@ -12,9 +14,10 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
+	github.com/chromedp/cdproto v0.159.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.9 // indirect
+	github.com/go-json-experiment/json v0.0.0-20260213210345-44df1a37e875 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect

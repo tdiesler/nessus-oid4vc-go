@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// AccessToken ---------------------------------------------------------------------------------------------------------
+// AccessToken =========================================================================================================
 
 // AccessToken is a Vault token usable to read exactly one holder's claims.
 type AccessToken struct {
@@ -25,7 +25,7 @@ func (t *AccessToken) WithExpiresAt(expiresAt time.Time) *AccessToken {
 	return t
 }
 
-// TokenAccessor -------------------------------------------------------------------------------------------------------
+// TokenAccessor =======================================================================================================
 
 // TokenAccessor accesses Vault's token endpoint.
 type TokenAccessor struct {
@@ -40,10 +40,10 @@ func (s *TokenAccessor) AccessToken(code string) (*AccessToken, error) {
 
 	secret, err := client.Logical().Unwrap(code)
 	if err != nil {
-		return nil, fmt.Errorf("oid4vci: redeem pre-authorized code: %w", err)
+		return nil, fmt.Errorf("redeem pre-authorized code: %w", err)
 	}
 	if secret == nil || secret.Auth == nil {
-		return nil, fmt.Errorf("oid4vci: redeem pre-authorized code: no auth in response")
+		return nil, fmt.Errorf("redeem pre-authorized code: no auth in response")
 	}
 
 	token, err := NewAccessToken(secret.Auth.ClientToken)
