@@ -5,34 +5,27 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/config"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/utils"
-)
-
-// Fixed by scripts/vault-setup's holder persona.
-const (
-	UserAlice    = "alice"
-	UserPassword = "password"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
 // TestCodeFlowAuthorization drives Vault's own OIDC provider login page as
 // Alice's wallet/user-agent would, redeems the resulting authorization code
 // at the token endpoint, and expects back a real access token.
 func TestCodeFlowAuthorization(t *testing.T) {
-	cfg, err := config.GetAppConfig()
+	cfg, err := co.GetAppConfig()
 	require.NoError(t, err)
 
 	// Complete the Authorization Code flow.
-	authAccessor, err := NewOAuthAuthorizationAccessor()
+	authAccessor, err := NewAuthorizationAccessor()
 	require.NoError(t, err)
-	code, err := authAccessor.CodeFlowAuthorization(cfg.OidcClient, "openid profile", UserAlice, UserPassword)
+	code, err := authAccessor.CodeFlowAuthorization(cfg.OidcClient, "openid profile", co.UserAlice, co.UserPassword)
 	require.NoError(t, err)
 	require.NotEmpty(t, code)
 
 	// Redeem the code at the token endpoint.
-	tokenAccessor, err := NewOAuthTokenAccessor()
+	tokenAccessor, err := NewTokenAccessor()
 	require.NoError(t, err)
-	token, err := tokenAccessor.ExchangeAuthorizationCode(cfg.OidcClient, code, cfg.RedirectURI)
+	token, err := tokenAccessor.ExchangeAuthorizationCode(cfg.OidcClient, code, cfg.RedirectUri)
 	require.NoError(t, err)
 	require.NotEmpty(t, token.AccessToken)
 
@@ -41,9 +34,9 @@ func TestCodeFlowAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	metadata, err := discovery.AuthorizationServerMetadata()
 	require.NoError(t, err)
-	jwks, err := utils.FetchJWKS(http.DefaultClient, metadata.JwksUri)
+	jwks, err := co.FetchJWKS(http.DefaultClient, metadata.JwksUri)
 	require.NoError(t, err)
-	claims, err := utils.VerifyJWT(token.IdToken, jwks)
+	claims, err := co.VerifyJWT(token.IdToken, jwks)
 	require.NoError(t, err)
 	require.Equal(t, "Alice", claims["firstName"])
 	require.Equal(t, "Wonderland", claims["familyName"])

@@ -5,17 +5,17 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/oid4vci"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/utils"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
+	"github.com/tdiesler/nessus-oid4vc-go/pkg/vault"
 )
 
-// OAuthTokenRequest ===================================================================================================
+// OAuth TokenRequest ==================================================================================================
 
-// OAuthTokenRequest is an OAuth 2.0 Access Token Request for the Authorization
+// TokenRequest is an OAuth 2.0 Access Token Request for the Authorization
 // Code grant (RFC 6749 §4.1.3), authenticated with the client's credentials
 // (RFC 6749 §2.3.1's "client_secret_basic" method).
-type OAuthTokenRequest struct {
-	utils.HttpPostRequest
+type TokenRequest struct {
+	co.HttpPostRequest
 	Code         string
 	ClientId     string
 	ClientSecret string
@@ -23,10 +23,10 @@ type OAuthTokenRequest struct {
 	RedirectUri  string
 }
 
-// NewOAuthTokenRequest constructs an OAuthTokenRequest for the Authorization Code
+// NewTokenRequest constructs an TokenRequest for the Authorization Code
 // grant against endpoint, authenticating as clientId/clientSecret.
-func NewOAuthTokenRequest(endpoint, code, redirectUri, clientId, clientSecret string) *OAuthTokenRequest {
-	return &OAuthTokenRequest{
+func NewTokenRequest(endpoint, code, redirectUri, clientId, clientSecret string) *TokenRequest {
+	return &TokenRequest{
 		Endpoint:     endpoint,
 		GrantType:    "authorization_code",
 		Code:         code,
@@ -37,7 +37,7 @@ func NewOAuthTokenRequest(endpoint, code, redirectUri, clientId, clientSecret st
 }
 
 // Send performs the Access Token Request and returns the resulting tokens.
-func (r *OAuthTokenRequest) Send(httpClient *http.Client) (*OAuthTokenResponse, error) {
+func (r *TokenRequest) Send(httpClient *http.Client) (*TokenResponse, error) {
 
 	// Build the Access Token Request's form body.
 	form := url.Values{}
@@ -51,7 +51,7 @@ func (r *OAuthTokenRequest) Send(httpClient *http.Client) (*OAuthTokenResponse, 
 	}
 
 	// Redeem the code.
-	token, err := r.Post[OAuthTokenResponse](httpClient, form)
+	token, err := r.Post[TokenResponse](httpClient, form)
 	if err != nil {
 		return nil, err
 	}
@@ -59,41 +59,41 @@ func (r *OAuthTokenRequest) Send(httpClient *http.Client) (*OAuthTokenResponse, 
 	return &token, nil
 }
 
-// OAuthTokenResponse ==================================================================================================
+// OAuth TokenResponse =================================================================================================
 
-// OAuthTokenResponse is an OAuth 2.0 Access Token Response (RFC 6749 §4.1.4 /
+// TokenResponse is an OAuth 2.0 Access Token Response (RFC 6749 §4.1.4 /
 // §5.1), returned by the authorization server's token endpoint.
-type OAuthTokenResponse struct {
+type TokenResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 	IdToken     string `json:"id_token"`
 	ExpiresIn   int    `json:"expires_in"`
 }
 
-// OAuthTokenAccessor ==================================================================================================
+// OAuth TokenAccessor =================================================================================================
 
-// OAuthTokenAccessor accesses an authorization server's token endpoint,
+// TokenAccessor accesses an authorization server's token endpoint,
 // e.g. to redeem an authorization code for tokens.
-type OAuthTokenAccessor struct {
+type TokenAccessor struct {
 	httpClient *http.Client
 }
 
-// NewOAuthTokenAccessor constructs an OAuthTokenAccessor, reusing
+// NewTokenAccessor constructs an TokenAccessor, reusing
 // Vault's own configured (TLS-aware) HTTP client rather than http.DefaultClient
 // — the token endpoint lives on the same server, it just doesn't speak
 // Vault's request/response envelope (no X-Vault-Token, no JSON body), so we
 // still build the request by hand instead of going through Logical().
-func NewOAuthTokenAccessor() (*OAuthTokenAccessor, error) {
-	client, err := oid4vci.NewClient()
+func NewTokenAccessor() (*TokenAccessor, error) {
+	client, err := vault.NewClient()
 	if err != nil {
 		return nil, err
 	}
-	return &OAuthTokenAccessor{httpClient: client.CloneConfig().HttpClient}, nil
+	return &TokenAccessor{httpClient: client.CloneConfig().HttpClient}, nil
 }
 
 // ExchangeAuthorizationCode redeems code for tokens at the named OIDC
 // client's discovered authorization server token endpoint.
-func (a *OAuthTokenAccessor) ExchangeAuthorizationCode(clientName, code, redirectUri string) (*OAuthTokenResponse, error) {
+func (a *TokenAccessor) ExchangeAuthorizationCode(clientName, code, redirectUri string) (*TokenResponse, error) {
 
 	// Discover the token endpoint.
 	discovery, err := NewWellKnownAccessor()
@@ -106,16 +106,16 @@ func (a *OAuthTokenAccessor) ExchangeAuthorizationCode(clientName, code, redirec
 	}
 
 	// Resolve the client's credentials.
-	clientId, err := oid4vci.DiscoverClientId(clientName)
+	clientId, err := vault.DiscoverClientId(clientName)
 	if err != nil {
 		return nil, err
 	}
-	clientSecret, err := oid4vci.DiscoverClientSecret(clientName)
+	clientSecret, err := vault.DiscoverClientSecret(clientName)
 	if err != nil {
 		return nil, err
 	}
 
 	// Redeem the code.
-	req := NewOAuthTokenRequest(metadata.TokenEndpoint, code, redirectUri, clientId, clientSecret)
+	req := NewTokenRequest(metadata.TokenEndpoint, code, redirectUri, clientId, clientSecret)
 	return req.Send(a.httpClient)
 }

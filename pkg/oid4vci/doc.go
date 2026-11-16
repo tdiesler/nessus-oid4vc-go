@@ -1,7 +1,11 @@
-// Package oid4vci implements the OID4VCI issuance flow as plain Go
-// services: Vault client access, credential offer creation (including
-// delegated pre-authorized-code minting, see issue #13), pre-authorized-code
-// redemption, and credential issuance. HTTP endpoints are a later pass once
-// these are proven out. The OAuth 2.0/OIDC client-side flow (browser-driven
-// authorization, token exchange, discovery) lives in pkg/oauth.
+// Package oid4vci implements this service's own OAuth 2.0 Authorization
+// Server, fronting Vault: its own discovery document, /authorize, /token,
+// and /userinfo endpoints, delegating authentication (Vault's userpass auth
+// method) and claims (Vault's KV v2 engine) to Vault underneath, and
+// signing id_tokens itself via Vault's transit secrets engine.
+//
+// This exists because Vault's own OIDC Identity Provider issues a
+// capability-less access token usable only at its own /userinfo — never for
+// KV reads or anything else — and has no path to RFC 9396
+// authorization_details support. See issue #17 for the full rationale.
 package oid4vci

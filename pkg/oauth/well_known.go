@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/config"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/utils"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
 // Well-known suffixes to try, in order. OpenID Connect Discovery 1.0 and
@@ -46,14 +45,14 @@ func NewWellKnownAccessor() (*WellKnownAccessor, error) {
 // AuthorizationServerMetadata fetches issuer's metadata document, trying each well-known
 // suffix in turn and returning the first one found.
 func (d *WellKnownAccessor) AuthorizationServerMetadata() (*AuthorizationServerMetadata, error) {
-	cfg, err := config.GetAppConfig()
+	cfg, err := co.GetAppConfig()
 	if err != nil {
 		return nil, err
 	}
 	var lastErr error
 	for _, suffix := range wellKnownSuffixes {
 		issuer := "/v1/identity/oidc/provider/" + cfg.OidcProvider
-		req := utils.NewHttpGetRequest(cfg.VaultAddr + issuer + suffix)
+		req := co.NewHttpGetRequest(cfg.VaultAddr + issuer + suffix)
 		metadata, err := req.Fetch[AuthorizationServerMetadata](d.httpClient)
 		if err != nil {
 			lastErr = err

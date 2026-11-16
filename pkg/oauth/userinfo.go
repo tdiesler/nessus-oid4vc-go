@@ -3,7 +3,7 @@ package oauth
 import (
 	"net/http"
 
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/utils"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
 // UserInfoAccessor ====================================================================================================
@@ -23,7 +23,7 @@ func NewUserInfoAccessor() (*UserInfoAccessor, error) {
 // Fetch retrieves claims about the end-user accessToken was issued for, from
 // userinfoEndpoint, authenticating with accessToken as a Bearer token.
 func (a *UserInfoAccessor) Fetch(userinfoEndpoint, accessToken string) (map[string]any, error) {
-	req := utils.NewHttpGetRequest(userinfoEndpoint)
+	req := co.NewHttpGetRequest(userinfoEndpoint)
 	req.WithBearerAuth(accessToken)
 	return req.Fetch[map[string]any](a.httpClient)
 }

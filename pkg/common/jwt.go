@@ -1,11 +1,11 @@
-package utils
+package common
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
 
-	jose "github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 )
 
@@ -44,7 +44,7 @@ func VerifyJWT(token string, jwks *jose.JSONWebKeySet) (map[string]any, error) {
 	}
 
 	var claims map[string]any
-	if err := parsed.Claims(jwks, &claims); err != nil {
+	if err = parsed.Claims(jwks, &claims); err != nil {
 		return nil, fmt.Errorf("verify JWT: %w", err)
 	}
 	return claims, nil

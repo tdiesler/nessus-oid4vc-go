@@ -1,4 +1,4 @@
-package config
+package common
 
 import (
 	"testing"
@@ -13,5 +13,6 @@ func TestAppConfigLoading(t *testing.T) {
 	require.NotEmptyf(t, cfg.RootToken, "no root token")
 	require.Equal(t, "oid4vc-client", cfg.OidcClient)
 	require.Equal(t, "oid4vc", cfg.OidcProvider)
-	require.Equal(t, "http://localhost:8400/callback", cfg.RedirectURI)
+	require.Equal(t, "http://localhost:8400/callback", cfg.RedirectUri)
+	require.Equal(t, "127.0.0.1:9000", cfg.Oid4vciAddr)
 }

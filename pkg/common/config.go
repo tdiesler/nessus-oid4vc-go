@@ -1,4 +1,4 @@
-package config
+package common
 
 import (
 	"fmt"
@@ -10,11 +10,14 @@ import (
 )
 
 type AppConfig struct {
-	VaultAddr    string
-	RootToken    string
+	VaultAddr string
+	RootToken string
+
 	OidcClient   string
 	OidcProvider string
-	RedirectURI  string
+	RedirectUri  string
+
+	Oid4vciAddr string
 }
 
 func NewAppConfig() (*AppConfig, error) {
@@ -22,10 +25,10 @@ func NewAppConfig() (*AppConfig, error) {
 	v := viper.New()
 	v.SetConfigFile(configFile())
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("config: read %s: %w", v.ConfigFileUsed(), err)
+		return nil, fmt.Errorf("common: read %s: %w", v.ConfigFileUsed(), err)
 	}
 
-	// NESSUS_OID4VC_ is this project's own env var prefix: any config key
+	// NESSUS_OID4VC_ is this project's own env var prefix: any common key
 	// picks up a matching env var automatically (e.g. Vault.OIDCClientID ->
 	// NESSUS_OID4VC_VAULT_OIDCCLIENTID), no per-field binding needed.
 	v.SetEnvPrefix("NESSUS_OID4VC")
@@ -41,21 +44,18 @@ func NewAppConfig() (*AppConfig, error) {
 		return nil, err
 	}
 
-	// OIDC provider/client registration.
-	v.SetDefault("Vault.OIDCProvider", "oid4vc")
-	v.SetDefault("Vault.RedirectURI", "http://localhost:8400/callback")
-
-	appcfg := &AppConfig{
+	cfg := &AppConfig{
 		VaultAddr:    v.GetString("Vault.Addr"),
 		RootToken:    v.GetString("Vault.RootToken"),
 		OidcClient:   v.GetString("Vault.OIDCClient"),
 		OidcProvider: v.GetString("Vault.OIDCProvider"),
-		RedirectURI:  v.GetString("Vault.RedirectURI"),
+		RedirectUri:  v.GetString("Vault.RedirectURI"),
+		Oid4vciAddr:  v.GetString("Oid4vci.Addr"),
 	}
-	if appcfg.VaultAddr == "" {
-		return nil, fmt.Errorf("config: Vault.Addr is required (set it in %s or VAULT_ADDR)", v.ConfigFileUsed())
+	if cfg.VaultAddr == "" {
+		return nil, fmt.Errorf("Vault.Addr is required (set it in %s or VAULT_ADDR)", v.ConfigFileUsed())
 	}
-	return appcfg, nil
+	return cfg, nil
 }
 
 func GetAppConfig() (*AppConfig, error) {
@@ -73,7 +73,7 @@ func GetAppConfig() (*AppConfig, error) {
 
 var appConfig *AppConfig
 
-// configFile returns the config file path: config/oid4vc-config.yml under
+// configFile returns the config file path: common/oid4vc-config.yml under
 // NESSUS_OID4VC_HOME, falling back to the process' working directory when unset.
 func configFile() string {
 	return filepath.Join(os.Getenv("NESSUS_OID4VC_HOME"), "config", "oid4vc-config.yml")

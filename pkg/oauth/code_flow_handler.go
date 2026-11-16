@@ -10,15 +10,15 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
-	log "github.com/tdiesler/nessus-oid4vc-go/pkg/logging"
+	log "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
-// BrowserAuthorizer completes an OAuth 2.0 OAuthAuthorizationRequest the way a
+// BrowserAuthorizer completes an OAuth 2.0 AuthorizationRequest the way a
 // user-agent would — interactively, through whatever login page the
 // authorization server presents.
 // Returns an authorization code on success.
 type BrowserAuthorizer interface {
-	Authorize(req *OAuthAuthorizationRequest, username, password string) (string, error)
+	Authorize(req *AuthorizationRequest, username, password string) (string, error)
 }
 
 var _ BrowserAuthorizer = (*ChromeAuthorizer)(nil)
@@ -38,7 +38,7 @@ func NewChromeAuthorizer() (*ChromeAuthorizer, error) {
 // server-side HTML login page); its bundled UI is what shows a login form
 // and performs the userpass login before continuing the authorize flow. So
 // this drives that UI rather than calling the API directly.
-func (c *ChromeAuthorizer) Authorize(req *OAuthAuthorizationRequest, username, password string) (string, error) {
+func (c *ChromeAuthorizer) Authorize(req *AuthorizationRequest, username, password string) (string, error) {
 	redirectURI, err := url.Parse(req.RedirectUri)
 	if err != nil {
 		return "", fmt.Errorf("parse redirect_uri %q: %w", req.RedirectUri, err)

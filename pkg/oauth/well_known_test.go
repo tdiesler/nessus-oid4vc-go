@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/config"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
 // TestDiscoverAuthorizationServerMetadata discovers the configured OIDC
@@ -12,7 +12,7 @@ import (
 // RFC 8414), and its authorization_endpoint points at the UI route, not the
 // raw /v1 API path.
 func TestDiscoverAuthorizationServerMetadata(t *testing.T) {
-	cfg, err := config.GetAppConfig()
+	cfg, err := co.GetAppConfig()
 	require.NoError(t, err)
 
 	accessor, err := NewWellKnownAccessor()

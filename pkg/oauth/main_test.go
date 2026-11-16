@@ -4,12 +4,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/config"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
 func TestMain(m *testing.M) {
 
-	config.SetupHomeDir()
+	co.SetupHomeDir()
 
 	os.Exit(m.Run())
 }

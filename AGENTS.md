@@ -142,7 +142,10 @@ current as new conventions get established.
   local commit only and does not imply permission to push.
 - Prefer new commits over amending once a commit has been pushed.
 - Commit messages for commits with multiple notable changes: one short
-  bullet per point, not prose paragraphs.
+  bullet per point, not prose paragraphs. Each bullet is a single short
+  sentence stating what changed — not why, not background, not anything
+  already captured in the associated issue; point at the issue instead of
+  restating it.
   Include a commit body with bullets summarizing material changes and relevant
   operational commands. Do not add build or test commands unless explicitly
   requested.

@@ -1,5 +1,8 @@
 Vault:
   Addr: http://192.168.0.30:30820
-  OidcClient: oid4vc-client
   OidcProvider: oid4vc
+  OidcClient: oid4vc-client
   RedirectURI: http://localhost:8400/callback
+
+Oid4vci:
+  Addr: 127.0.0.1:9000

@@ -36,6 +36,11 @@ for p in $(vault policy list -format=json 2>/dev/null | jq -r '.[] | select(star
   vault policy delete "${p}" >/dev/null 2>&1 || true
 done
 
+echo "Resetting per-subject offer-write policies ..."
+for p in $(vault policy list -format=json 2>/dev/null | jq -r '.[] | select(startswith("subject-offer-write-"))'); do
+  vault policy delete "${p}" >/dev/null 2>&1 || true
+done
+
 echo "Resetting OIDC provider 'oid4vc' ..."
 vault delete identity/oidc/provider/oid4vc >/dev/null 2>&1 || true
 
@@ -73,15 +78,31 @@ vault auth enable userpass >/dev/null
 
 USERPASS_ACCESSOR="$(vault auth list -format=json | jq -r '."userpass/".accessor')"
 
-# Policy granting each subject read-only access to their own claims, keyed by
-# their own Identity entity name — one shared, templated policy for all subjects.
+# Policy granting each subject read-only access to their own claims and their
+# own incoming offers, keyed by their own Identity entity name — one shared,
+# templated policy for all subjects.
 #
 echo "Writing policy 'subject-self' ..."
 vault policy write subject-self - >/dev/null <<'EOF'
 path "secret/data/subjects/{{identity.entity.name}}" {
   capabilities = ["read"]
 }
+
+path "secret/data/offers/{{identity.entity.name}}" {
+  capabilities = ["read"]
+}
 EOF
+
+# Issue #13: cross-entity data delivery. An issuer needs to hand a subject
+# data (e.g. a credential offer) that the subject then reads with their own,
+# already-held login token — no delegated minting required for the read side.
+# `{{identity.entity.name}}` templating only ever resolves to the *caller's*
+# own identity, so a writer can never get a templated grant onto someone
+# else's path; the write side instead uses a literal per-subject policy
+# (`subject-offer-write-<username>`, written in create_user below), kept on a
+# path (`secret/data/offers/<username>`) separate from the subject's own
+# self-managed claims at `secret/data/subjects/<username>`.
+#
 
 # Issue #13: delegated pre-authorized-code minting. Max (the issuer persona)
 # can mint a code for Alice without ever holding read access to her claims
@@ -200,6 +221,13 @@ path "secret/data/subjects/${username}" {
   capabilities = ["read"]
 }
 EOF
+
+    echo "Writing policy 'subject-offer-write-${username}' ..."
+    vault policy write "subject-offer-write-${username}" - >/dev/null <<EOF
+path "secret/data/offers/${username}" {
+  capabilities = ["create", "update"]
+}
+EOF
   fi
 }
 
@@ -225,6 +253,16 @@ create_user "${ROLE_HOLDER}" "alice" "Alice" "Wonderland" "alice@email.com"
 # Issuer persona: Max, who will mint pre-authorized codes for holders.
 #
 create_user "${ROLE_ISSUER}" "max" "Max" "Mustermann" "max@email.com"
+
+# Simplification for this demo: grant max's standing token direct write
+# access to Alice's offer path, rather than minting a short-lived token
+# scoped to just "subject-offer-write-alice" the way issuer-mint does for
+# reads. A stricter version would mint here too; the point being
+# demonstrated is the read side (Alice using her own login token), not
+# re-proving the delegated-minting mechanic.
+#
+echo "Granting issuer 'max' write access to Alice's offer path ..."
+vault write auth/userpass/users/max token_policies="issuer-mint,subject-offer-write-alice" >/dev/null
 
 # Demonstrate: Alice drives a standard OAuth 2.0 Authorization Code flow
 # against Vault's own OIDC provider, and ends up viewing her own claims via
@@ -286,6 +324,19 @@ echo "Redeemed token's policies: $(vault token lookup -format=json "${REDEEMED_T
 
 echo "Fetching Alice's claims using the redeemed token, to prove delegated minting works end-to-end ..."
 VAULT_TOKEN="${REDEEMED_TOKEN}" vault kv get -mount=secret subjects/alice
+
+# Demonstrate: Max writes an offer to Alice's dedicated offer path — a
+# namespace he can write but never read — and Alice reads it back with her
+# own, already-held login token. No delegated minting needed on the read
+# side; the only new grant was max's write access to one literal path.
+#
+echo
+echo "Max writes an offer to Alice's offer path ..."
+VAULT_TOKEN="${MAX_TOKEN}" vault kv put -mount=secret offers/alice \
+  message="You have a pending credential offer" issuedBy="max" >/dev/null
+
+echo "Alice reads the offer using her own existing login token ..."
+VAULT_TOKEN="${ALICE_TOKEN}" vault kv get -mount=secret offers/alice
 
 echo
 echo "Vault setup complete"

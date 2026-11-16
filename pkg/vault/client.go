@@ -1,41 +1,42 @@
-package oid4vci
+package vault
 
 import (
 	"fmt"
 
 	"github.com/hashicorp/vault/api"
-	cfg "github.com/tdiesler/nessus-oid4vc-go/pkg/config"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
-// NewClient returns a fresh, unauthenticated Vault client pointing to config Vault.Addr
+// NewClient returns a fresh, unauthenticated Vault client pointing to common Vault.Addr
 // (or the library default, driven by VAULT_ADDR, when addr is empty).
-func NewClient() (*api.Client, error) {
-	appcfg, err := cfg.GetAppConfig()
+func NewClient(token ...string) (*api.Client, error) {
+	cfg, err := co.GetAppConfig()
 	if err != nil {
 		return nil, err
 	}
 	apicfg := api.DefaultConfig()
-	apicfg.Address = appcfg.VaultAddr
-	return api.NewClient(apicfg)
+	apicfg.Address = cfg.VaultAddr
+	client, err := api.NewClient(apicfg)
+	if err != nil {
+		return nil, err
+	}
+	if len(token) > 0 {
+		client.SetToken(token[0])
+	}
+	return client, nil
 }
 
 // RootClient returns a Vault client authenticated with the local dev
 // Vault's root token, fetched the same way scripts/vault-setup does.
 func RootClient() (*api.Client, error) {
-
-	client, err := NewClient()
+	cfg, err := co.GetAppConfig()
 	if err != nil {
 		return nil, err
 	}
-	appcfg, err := cfg.GetAppConfig()
-	if err != nil {
-		return nil, err
-	}
-	if appcfg.RootToken == "" {
+	if cfg.RootToken == "" {
 		return nil, fmt.Errorf("no root token")
 	}
-	client.SetToken(appcfg.RootToken)
-	return client, nil
+	return NewClient(cfg.RootToken)
 }
 
 // DiscoverClientId provides general mapping from a client's name to its client_id.
