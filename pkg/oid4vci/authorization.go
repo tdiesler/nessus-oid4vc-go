@@ -40,26 +40,21 @@ type AuthorizationServer struct {
 // NewAuthorizationServer constructs an AuthorizationServer for issuer (this
 // service's externally-visible identity — used as the id_token's "iss"
 // claim and to build the discovery document's endpoint URLs), bound to addr.
-func NewAuthorizationServer(issuer string) (*AuthorizationServer, error) {
+func NewAuthorizationServer(issuer, addr string) (*AuthorizationServer, error) {
 
 	cfg, err := co.GetAppConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	// Resolve this server's one registered client from Vault's existing
-	// OIDC client registration, reusing the same client_id/secret
-	// pkg/oauth's tests already drive against Vault's own OIDC provider.
-	clientId, err := vault.DiscoverClientId(cfg.OidcClient)
-	if err != nil {
-		return nil, err
-	}
-	clientSecret, err := vault.DiscoverClientSecret(cfg.OidcClient)
-	if err != nil {
-		return nil, err
-	}
+	// This server's one registered client. cfg.OidcClient is just this
+	// service's own config value — unlike pkg/oauth (which drives Vault's
+	// own OIDC provider and so needs Vault's generated client_id), this
+	// server's client registry is entirely its own, so there's nothing to
+	// resolve from Vault. It's a public client: the caller is a holder
+	// wallet, which can't be expected to hold a secret.
 	clients := map[string]*Client{
-		clientId: NewClient(clientId, clientSecret, cfg.RedirectUri),
+		cfg.OidcClient: NewClient(cfg.OidcClient, cfg.RedirectUri),
 	}
 
 	// Sign id_tokens via Vault transit.
@@ -69,7 +64,7 @@ func NewAuthorizationServer(issuer string) (*AuthorizationServer, error) {
 	}
 
 	// Bind the address Start will serve on.
-	listener, err := net.Listen("tcp", cfg.Oid4vciAddr)
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
@@ -123,14 +118,12 @@ func (as *AuthorizationServer) CompleteLogin(clientId, redirectUri, username, pa
 
 // ExchangeCode redeems code for an access token and a signed id_token,
 // binding the exchange to the same client and redirect_uri the code was
-// issued for (RFC 6749 §4.1.3).
-func (as *AuthorizationServer) ExchangeCode(code, clientId, clientSecret, redirectUri string) (*TokenResponse, error) {
-	client, err := as.assertClient(clientId, redirectUri)
+// issued for (RFC 6749 §4.1.3). Clients registered here are public (RFC
+// 6749 §2.3), so this doesn't authenticate the caller beyond clientId.
+func (as *AuthorizationServer) ExchangeCode(code, clientId, redirectUri string) (*TokenResponse, error) {
+	_, err := as.assertClient(clientId, redirectUri)
 	if err != nil {
 		return nil, err
-	}
-	if client.Secret != clientSecret {
-		return nil, fmt.Errorf("invalid client secret for %q", clientId)
 	}
 
 	session, err := as.sessions.RedeemCode(code)
@@ -152,6 +145,17 @@ func (as *AuthorizationServer) ExchangeCode(code, clientId, clientSecret, redire
 	}
 
 	return NewTokenResponse(accessToken, idToken, tokenTTL), nil
+}
+
+// Logout revokes accessToken's underlying Vault token and removes its
+// session, ending the holder's Vault-side session immediately rather than
+// letting it linger until the access token's natural expiry.
+func (as *AuthorizationServer) Logout(accessToken string) error {
+	session, err := as.sessions.RevokeAccessToken(accessToken)
+	if err != nil {
+		return err
+	}
+	return vault.RevokeToken(session.VaultToken.Token)
 }
 
 // ReadKeyValueClaims resolves accessToken back to the Vault token it was
@@ -218,22 +222,21 @@ func (as *AuthorizationServer) WriteKeyValueClaims(accessToken, path, alias stri
 
 // Client ===============================================================================================================
 
-// Client is an OAuth 2.0 client registered with this authorization server.
-// This is this service's own client registry, distinct from Vault's
-// identity/oidc/client: fronting Vault means client registration becomes
-// this service's concern too, not Vault's. Compare OAuthClient, the client
-// side of the same protocol.
+// Client is a public OAuth 2.0 client registered with this authorization
+// server (RFC 6749 §2.1) — the role a holder wallet plays, which can't be
+// expected to hold a secret. This is this service's own client registry,
+// distinct from Vault's identity/oidc/client: fronting Vault means client
+// registration becomes this service's concern too, not Vault's. Compare
+// OAuthClient, the client side of the same protocol.
 type Client struct {
 	Id          string
-	Secret      string
 	RedirectUri string
 }
 
 // NewClient constructs a Client.
-func NewClient(id, secret, redirectUri string) *Client {
+func NewClient(id, redirectUri string) *Client {
 	return &Client{
 		Id:          id,
-		Secret:      secret,
 		RedirectUri: redirectUri,
 	}
 }

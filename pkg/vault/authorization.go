@@ -40,7 +40,25 @@ func (s *AuthorizationAccessor) Login(username, password string) (*AccessToken, 
 	return token, nil
 }
 
+// RevokeToken revokes token at Vault's own token-revocation endpoint — the
+// equivalent of a logout. A Vault token can always revoke itself, so this
+// needs no privileges beyond token itself. The client must be
+// authenticated as token before calling RevokeSelf: the Vault API only
+// ever revokes whichever token the client itself is set to use, not an
+// argument passed in.
+func (s *AuthorizationAccessor) RevokeToken(token string) error {
+	client, err := NewClient(token)
+	if err != nil {
+		return err
+	}
+	return client.Auth().Token().RevokeSelf(token)
+}
+
 // Functions -----------------------------------------------------------------------------------------------------------
+
+func RevokeToken(token string) error {
+	return NewAuthorizationAccessor().RevokeToken(token)
+}
 
 func UserpassLogin(username, password string) (*AccessToken, error) {
 	return NewAuthorizationAccessor().Login(username, password)

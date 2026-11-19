@@ -104,6 +104,21 @@ func (s *SessionStore) RedeemCode(code string) (*Session, error) {
 	return session, nil
 }
 
+// RevokeAccessToken looks up and deletes accessToken's Session, so a
+// revoked access token stops working immediately rather than lingering
+// until its natural expiry.
+func (s *SessionStore) RevokeAccessToken(accessToken string) (*Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.tokens[accessToken]
+	delete(s.tokens, accessToken)
+	if !ok || session.Expired() {
+		return nil, fmt.Errorf("invalid or expired access token")
+	}
+	return session, nil
+}
+
 // Session looks up accessToken's Session without consuming it.
 func (s *SessionStore) Session(accessToken string) (*Session, error) {
 	s.mu.Lock()

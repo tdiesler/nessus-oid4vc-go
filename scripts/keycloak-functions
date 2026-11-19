@@ -1,0 +1,89 @@
+#!/bin/zsh
+
+decode_vc() {
+  local cred="$1"
+  python3 -c "
+import base64, hashlib, json, sys
+
+cred = sys.argv[1]
+
+def b64url_decode(s):
+    s += '=' * (4 - len(s) % 4)
+    return base64.urlsafe_b64decode(s)
+
+def decode_jwt_payload(jwt):
+    return json.loads(b64url_decode(jwt.split('.')[1]))
+
+if '~' in cred:
+    parts = cred.split('~')
+    payload = decode_jwt_payload(parts[0])
+    print(json.dumps(payload, indent=2))
+
+    hash_alg = payload.get('_sd_alg', 'sha-256')
+    disclosures = []
+    for p in parts[1:]:
+        if not p or '.' in p:
+            continue
+        disc = json.loads(b64url_decode(p))
+        h = base64.urlsafe_b64encode(
+            hashlib.sha256(p.encode()).digest()
+        ).rstrip(b'=').decode()
+        disclosures.append((disc[0], disc[1], disc[2], h))
+
+    if disclosures:
+        print()
+        print('Disclosures:')
+        for salt, key, value, h in disclosures:
+            val = json.dumps(value) if not isinstance(value, str) else value
+            print(f'  [\"{salt}\", \"{key}\", {val}] => {h}')
+else:
+    print(json.dumps(decode_jwt_payload(cred), indent=2))
+" "${cred}"
+}
+
+# Converts the Java oid4vc CLI's wallet.json (realm-keyed, single server)
+# into the Go wallet CLI's Issuer-shaped wallet.keycloak.json (one file per
+# issuer flavor; see pkg/wallet), under the fixed alias "keycloak" — the
+# realm name still lives in issuerUrl, it's just not used as the map key,
+# since "oid4vci" (a common realm name here) would otherwise be confused
+# with this project's own oid4vci service. Carries over structural config
+# only (clientId, defaultKey, keys) — authorizationDetails, credentials,
+# and the access/refresh token + expiry are dropped: that session and
+# credential state is short-lived and gets re-established by the Go CLI's
+# own login, not migrated from the Java run.
+transform_wallet_to_issuer_shape() {
+  local java_wallet="${1:-.config/wallet.json}"
+  local issuer_wallet="${2:-.config/wallet.keycloak.json}"
+  local redirect_uri="${3:?redirect_uri is required}"
+
+  jq --arg redirectUri "${redirect_uri}" '
+    (.serverUrl) as $server
+    | (.defaultRealm) as $realm
+    | {
+        defaultIssuer: "keycloak",
+        issuers: {
+          keycloak: (
+            .realms[$realm]
+            | {
+                flavor: "keycloak",
+                issuerUrl: ($server + "/realms/" + $realm),
+                redirectUri: $redirectUri,
+                defaultClient: .defaultClient,
+                defaultUser: .defaultUser,
+                users: (
+                  .users
+                  | with_entries(
+                      .value = {
+                        clientId: .value.clientId,
+                        defaultKey: .value.defaultKey,
+                        keys: .value.keys
+                      }
+                    )
+                )
+              }
+          )
+        }
+      }
+  ' "${java_wallet}" > "${issuer_wallet}.tmp"
+  mv "${issuer_wallet}.tmp" "${issuer_wallet}"
+}

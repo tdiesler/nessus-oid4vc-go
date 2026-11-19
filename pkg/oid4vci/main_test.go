@@ -23,9 +23,15 @@ func TestMain(m *testing.M) {
 
 	co.SetupHomeDir()
 
+	cfg, err := co.GetAppConfig()
+	if err != nil {
+		co.ErrorE(err)
+		os.Exit(1)
+	}
+
 	// Start once for the whole package: AuthorizationServer binds a fixed,
 	// configured address (cfg.Oid4vci.Addr).
-	as, err := NewAuthorizationServer(testIssuer)
+	as, err := NewAuthorizationServer(testIssuer, cfg.Oid4vciAddr)
 	if err != nil {
 		co.ErrorE(err)
 		os.Exit(1)

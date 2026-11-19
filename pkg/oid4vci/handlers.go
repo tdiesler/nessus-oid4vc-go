@@ -10,16 +10,17 @@ import (
 
 // NewMux builds this authorization server's HTTP route table: discovery,
 // the Authorization Code flow's /authorize and /token endpoints, /userinfo,
-// and the JWKS document /token's id_tokens verify against. This is the only
-// file in the package that knows about net/http — a future Vault plugin
-// would replace just this file with logical.Backend paths, calling the same
-// AuthorizationServer underneath.
+// /revoke, and the JWKS document /token's id_tokens verify against. This is
+// the only file in the package that knows about net/http — a future Vault
+// plugin would replace just this file with logical.Backend paths, calling
+// the same AuthorizationServer underneath.
 func NewMux(as *AuthorizationServer) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", handleDiscovery(as))
 	mux.HandleFunc("GET /authorize", handleAuthorizeForm(as))
 	mux.HandleFunc("POST /authorize", handleAuthorizeLogin(as))
 	mux.HandleFunc("POST /token", handleToken(as))
+	mux.HandleFunc("POST /revoke", handleRevoke(as))
 	mux.HandleFunc("GET /userinfo", handleUserInfo(as))
 	mux.HandleFunc("GET /jwks.json", handleJWKS(as))
 	return mux
@@ -111,6 +112,20 @@ func handleJWKS(as *AuthorizationServer) http.HandlerFunc {
 	}
 }
 
+// handleRevoke implements RFC 7009 token revocation: always a 200,
+// whether or not token was valid/known, to avoid leaking which tokens are
+// live.
+func handleRevoke(as *AuthorizationServer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		_ = as.Logout(r.FormValue("token"))
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
 func handleToken(as *AuthorizationServer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
@@ -118,12 +133,7 @@ func handleToken(as *AuthorizationServer) http.HandlerFunc {
 			return
 		}
 
-		clientId, clientSecret, ok := r.BasicAuth()
-		if !ok {
-			clientId, clientSecret = r.FormValue("client_id"), r.FormValue("client_secret")
-		}
-
-		token, err := as.ExchangeCode(r.FormValue("code"), clientId, clientSecret, r.FormValue("redirect_uri"))
+		token, err := as.ExchangeCode(r.FormValue("code"), r.FormValue("client_id"), r.FormValue("redirect_uri"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

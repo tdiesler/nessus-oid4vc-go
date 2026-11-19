@@ -55,7 +55,11 @@ current as new conventions get established.
   because one grant type happens to be implementable that way. Even flows
   we could technically proxy straight through to Vault (e.g. Authorization
   Code against Vault's OIDC Provider) stay fronted by our service, so
-  wallets see one consistent contract.
+  wallets see one consistent contract. (3) Vault's own OIDC provider has no
+  public-client mode at all — every client it registers gets a
+  `client_secret`, and its token endpoint rejects a request with none
+  (`401 invalid_client`); a holder wallet, which can't hold a secret,
+  couldn't use it directly even if we wanted it to.
 
 ## Dependency choices
 
@@ -107,29 +111,46 @@ current as new conventions get established.
   specific value (e.g. "fixed by scripts/vault-setup's client registration"
   next to a literal) is fine; restating a list of facts that live elsewhere
   is not.
+- Doc comments and in-code strings (error messages, etc.) describe only
+  current behavior. Don't reference a GitHub issue number in either, and
+  don't phrase things in terms of future/planned work ("not yet supported",
+  "once X needs this too", "will eventually") — both go stale silently the
+  moment the plan changes. State the current fact instead (e.g. "only X is
+  supported" rather than "X not yet supported, see issue #N"). Only mention
+  an issue number when explicitly asked to in that moment.
 
 ## Testing
 
-- No Vault mocks/fakes: confidence in "this works against Vault" only comes
-  from actually talking to Vault. Any test for functionality we claim to
-  support (KV reads, Transit signing, identity/entity lookups, token
-  issuance, ...) is an integration test that runs against a real Vault —
-  the local dev instance (`scripts/vault-setup`'s target), not an in-memory
-  fake implementing the client interface.
-- Keep integration tests from stepping on each other without relying on
-  Vault namespaces (OSS/OpenBao doesn't have them): each test uses its own
-  uniquely-named entity/KV path (e.g. derived from `t.Name()` or a random
-  suffix) and tears it down via `t.Cleanup`, rather than depending on
-  `scripts/vault-setup`'s full reset.
+- No Vault/Keycloak mocks/fakes: confidence in "this works against Vault"
+  (or Keycloak) only comes from actually talking to it. Any test for
+  functionality we claim to support (KV reads, Transit signing,
+  identity/entity lookups, token issuance, ...) is an integration test that
+  runs against the real local dev instance — Vault (`scripts/vault-setup`'s
+  target) or Keycloak (`scripts/keycloak-setup`'s target) — not an
+  in-memory fake implementing the client interface.
+- Keep Vault integration tests from stepping on each other without relying
+  on Vault namespaces (OSS/OpenBao doesn't have them): each test uses its
+  own uniquely-named entity/KV path (e.g. derived from `t.Name()` or a
+  random suffix) and tears it down via `t.Cleanup`, rather than depending
+  on `scripts/vault-setup`'s full reset. Keycloak has no equivalent
+  per-test provisioning from Go: tests log in as the fixed holder user
+  (co.UserAlice/co.UserPassword) `scripts/keycloak-setup` already created,
+  reading that realm's wallet.keycloak.json (see pkg/wallet) rather than
+  creating their own realm/client/user.
 - Plain, fast, in-process unit tests with no external dependency (e.g. the
   pre-authorized-code store's expiry/single-use logic) stay as such — not
-  everything needs Vault.
-- The agent may access the local dev Vault instance directly (CLI, curl, Go
-  tests) and is expected to for anything above — be practical about it,
-  including the token overhead of doing so. Flag it rather than dumping a
-  verbose response when output would be expensive to process. Docker,
-  Kubernetes, or any other live/deployed service beyond this local dev
-  Vault stays off-limits per the user's global instructions.
+  everything needs Vault or Keycloak.
+- The agent may access the local dev Vault and Keycloak instances directly
+  (CLI, curl, Go tests) and is expected to for anything above — be
+  practical about it, including the token overhead of doing so. Flag it
+  rather than dumping a verbose response when output would be expensive to
+  process. Docker, Kubernetes, or any other live/deployed service beyond
+  these two local dev instances stays off-limits per the user's global
+  instructions.
+- Keycloak-dependent tests skip (not fail) when `.config/wallet.keycloak.json`
+  isn't present — `scripts/keycloak-setup` hasn't necessarily been run on
+  every machine running `go test`, unlike Vault, which every test here
+  already assumes is up.
 
 ## Git
 

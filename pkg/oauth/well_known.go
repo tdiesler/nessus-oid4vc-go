@@ -16,20 +16,6 @@ var wellKnownSuffixes = []string{
 	"/.well-known/oauth-authorization-server",
 }
 
-// AuthorizationServerMetadata =========================================================================================
-
-// AuthorizationServerMetadata is the subset of an authorization server's
-// discovery document the issuer service needs to locate its endpoints,
-// rather than assuming hardcoded paths.
-type AuthorizationServerMetadata struct {
-	Issuer                string   `json:"issuer"`
-	AuthorizationEndpoint string   `json:"authorization_endpoint"`
-	TokenEndpoint         string   `json:"token_endpoint"`
-	UserinfoEndpoint      string   `json:"userinfo_endpoint"`
-	JwksUri               string   `json:"jwks_uri"`
-	ScopesSupported       []string `json:"scopes_supported"`
-}
-
 // WellKnownAccessor ===================================================================================================
 
 // WellKnownAccessor fetches an authorization server's metadata document.
@@ -44,7 +30,7 @@ func NewWellKnownAccessor() (*WellKnownAccessor, error) {
 
 // AuthorizationServerMetadata fetches issuer's metadata document, trying each well-known
 // suffix in turn and returning the first one found.
-func (d *WellKnownAccessor) AuthorizationServerMetadata() (*AuthorizationServerMetadata, error) {
+func (d *WellKnownAccessor) AuthorizationServerMetadata() (*co.AuthorizationServerMetadata, error) {
 	cfg, err := co.GetAppConfig()
 	if err != nil {
 		return nil, err
@@ -53,7 +39,7 @@ func (d *WellKnownAccessor) AuthorizationServerMetadata() (*AuthorizationServerM
 	for _, suffix := range wellKnownSuffixes {
 		issuer := "/v1/identity/oidc/provider/" + cfg.OidcProvider
 		req := co.NewHttpGetRequest(cfg.VaultAddr + issuer + suffix)
-		metadata, err := req.Fetch[AuthorizationServerMetadata](d.httpClient)
+		metadata, err := req.Fetch[co.AuthorizationServerMetadata](d.httpClient)
 		if err != nil {
 			lastErr = err
 			continue

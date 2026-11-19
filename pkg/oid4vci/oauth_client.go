@@ -10,27 +10,25 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/vault"
 )
 
 // OAuthClient ===============================================================================================================
 
 // OAuthClient drives an OAuth 2.0 Authorization Code flow against an
 // AuthorizationServer from the client's side — the role a wallet plays
-// against this service (see issue #17). Unlike Client (this server's
-// registration record for a caller), OAuthClient is the caller itself; it
-// has no dependency on testing and is just as usable from a real wallet
-// simulator or CLI as from a test.
+// against this service, as a public client (RFC 6749 §2.1), with no
+// secret. Unlike Client (this server's registration record for a caller),
+// OAuthClient is the caller itself; it has no dependency on testing and is
+// just as usable from a real wallet simulator or CLI as from a test.
 type OAuthClient struct {
-	baseUrl      string
-	clientId     string
-	clientSecret string
-	redirectUri  string
-	httpClient   *http.Client
+	baseUrl     string
+	clientId    string
+	redirectUri string
+	httpClient  *http.Client
 }
 
 // NewOAuthClient constructs an OAuthClient for the authorization server at
-// baseURL, authenticating as clientId/clientSecret.
+// baseURL, identifying itself as clientId.
 func NewOAuthClient() (*OAuthClient, error) {
 
 	cfg, err := co.GetAppConfig()
@@ -41,20 +39,10 @@ func NewOAuthClient() (*OAuthClient, error) {
 	baseUrl := "http://" + cfg.Oid4vciAddr
 	redirectUri := cfg.RedirectUri
 
-	clientId, err := vault.DiscoverClientId(cfg.OidcClient)
-	if err != nil {
-		return nil, err
-	}
-	clientSecret, err := vault.DiscoverClientSecret(cfg.OidcClient)
-	if err != nil {
-		return nil, err
-	}
-
 	client := OAuthClient{
-		baseUrl:      baseUrl,
-		clientId:     clientId,
-		clientSecret: clientSecret,
-		redirectUri:  redirectUri,
+		baseUrl:     baseUrl,
+		clientId:    cfg.OidcClient,
+		redirectUri: redirectUri,
 		httpClient: &http.Client{
 			// /authorize responds with a redirect carrying the authorization
 			// code in its query string — the thing Authorize needs to read,
@@ -96,10 +84,11 @@ func (c *OAuthClient) Authorize(username, password string) (string, error) {
 	return code, nil
 }
 
-// ExchangeCode redeems code at /token, authenticating as c.
+// ExchangeCode redeems code at /token, identifying itself as c.clientId.
 func (c *OAuthClient) ExchangeCode(code string) (*TokenResponse, error) {
 	form := url.Values{
 		"grant_type":   {"authorization_code"},
+		"client_id":    {c.clientId},
 		"code":         {code},
 		"redirect_uri": {c.redirectUri},
 	}
@@ -108,7 +97,6 @@ func (c *OAuthClient) ExchangeCode(code string) (*TokenResponse, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.SetBasicAuth(c.clientId, c.clientSecret)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

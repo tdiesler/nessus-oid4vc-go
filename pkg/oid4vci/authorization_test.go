@@ -33,6 +33,27 @@ func TestOAuthAuthorization(t *testing.T) {
 	require.Equal(t, co.UserAlice, claims["sub"])
 }
 
+// TestLogout exercises Logout end-to-end: revoking the session's
+// underlying Vault token via Vault's own revoke-self endpoint, and
+// removing the session so the access token itself stops working too.
+func TestLogout(t *testing.T) {
+	oauth, err := NewOAuthClient()
+	require.NoError(t, err)
+
+	code, err := oauth.Authorize(co.UserAlice, co.UserPassword)
+	require.NoError(t, err)
+	token, err := oauth.ExchangeCode(code)
+	require.NoError(t, err)
+
+	_, err = authServer.ReadSubjectsKeyValueClaims(token.AccessToken)
+	require.NoError(t, err)
+
+	require.NoError(t, authServer.Logout(token.AccessToken))
+
+	_, err = authServer.ReadSubjectsKeyValueClaims(token.AccessToken)
+	require.Error(t, err)
+}
+
 // TestUserInfoClaims resolves an access token back to Alice's claims,
 // sourced from Vault KV — not Vault's identity entity metadata, which is
 // all Vault's own OIDC scope templates could ever reach (see issue #17).
