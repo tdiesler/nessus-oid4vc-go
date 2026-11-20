@@ -21,7 +21,7 @@ var authServer *AuthorizationServer
 
 func TestMain(m *testing.M) {
 
-	co.SetupHomeDir()
+	co.HomeDir()
 
 	cfg, err := co.GetAppConfig()
 	if err != nil {

@@ -16,6 +16,10 @@ current as new conventions get established.
   a single reasonable resolution (typos, mislabeled section banners, missing
   doc-convention markers, misplaced test fixtures, grammar nits) — just make
   those and mention what was done.
+- A question is not a request to act. When the user asks something phrased
+  as a question ("do we need X?", "would Y work?"), answer it — don't treat
+  it as authorization to go implement the answer. Wait for an explicit
+  go-ahead before changing files.
 - In prose, surround em dashes with spaces (`word — word`).
 - Treat user suggestions as hypotheses to evaluate, not decisions to affirm
   automatically. Check them against the stated objective, current evidence,
@@ -147,10 +151,10 @@ current as new conventions get established.
   process. Docker, Kubernetes, or any other live/deployed service beyond
   these two local dev instances stays off-limits per the user's global
   instructions.
-- Keycloak-dependent tests skip (not fail) when `.config/wallet.keycloak.json`
-  isn't present — `scripts/keycloak-setup` hasn't necessarily been run on
-  every machine running `go test`, unlike Vault, which every test here
-  already assumes is up.
+- Keycloak-dependent tests fail (not skip) when `.config/wallet.keycloak.json`
+  isn't present, the same as Vault tests fail when Vault isn't reachable:
+  both are assumed to be set up (`scripts/vault-setup` /
+  `scripts/keycloak-setup`) before running this repo's tests.
 
 ## Git
 
@@ -158,6 +162,12 @@ current as new conventions get established.
   message. Finishing a piece of work does not imply permission to commit it.
   Each minor commit requires individual user sign-off; agreeing to work in
   minor steps does not authorize subsequent commits.
+- A request to commit authorizes committing the current state, not changing
+  it first. If something looks off while preparing a commit (a missing
+  guard, a stale doc comment, a discrepancy with `AGENTS.md`), flag it and
+  ask — don't fix it inline as part of "getting ready to commit." Current
+  state may be that way on purpose; a commit request is not license to
+  second-guess it.
 - Never `git push` (including force variants) without the user's explicit,
   per-action confirmation in that message. Amending a commit changes the
   local commit only and does not imply permission to push.

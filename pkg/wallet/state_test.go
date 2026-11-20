@@ -1,20 +1,45 @@
 package wallet
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jose-util/generator"
 	"github.com/stretchr/testify/require"
 )
 
+func TestConnectionAddHolderKey(t *testing.T) {
+	conn := NewConnection("test-client")
+
+	kid, err := conn.AddHolderKey("")
+	require.NoError(t, err)
+	require.Equal(t, "es256#1", kid)
+	require.Equal(t, "es256#1", conn.DefaultKey)
+	require.Len(t, conn.Keys, 1)
+
+	kid, err = conn.AddHolderKey("")
+	require.NoError(t, err)
+	require.Equal(t, "es256#2", kid)
+	require.Len(t, conn.Keys, 2)
+
+	kid, err = conn.AddHolderKey("custom")
+	require.NoError(t, err)
+	require.Equal(t, "custom", kid)
+	require.Equal(t, "custom", conn.DefaultKey)
+	require.Len(t, conn.Keys, 3)
+
+	// Re-creating a named key replaces the existing one with that name.
+	kid, err = conn.AddHolderKey("custom")
+	require.NoError(t, err)
+	require.Equal(t, "custom", kid)
+	require.Len(t, conn.Keys, 3)
+}
+
 func TestConnectionRoundTripsThroughJSON(t *testing.T) {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	_, privateKey, err := generator.NewSigningKey(jose.ES256, 0)
 	require.NoError(t, err)
 
 	conn := NewConnection("test-client").
@@ -48,26 +73,26 @@ func TestLoadMergesPerKindFiles(t *testing.T) {
 	dir := t.TempDir()
 
 	vaultState := NewWalletState()
-	vaultState.DefaultIssuer = "vault-dev"
-	vaultState.Issuers["vault-dev"] = NewIssuer(IssuerVault, "http://vault.test/v1/identity/oidc/provider/oid4vc")
-	require.NoError(t, vaultState.SaveIssuer(dir, IssuerVault))
+	vaultState.DefaultIssuer = IssuerVault
+	vaultState.Issuers[IssuerVault] = NewIssuer(IssuerVault, "http://vault.test/v1/identity/oidc/provider/oid4vc")
+	require.NoError(t, vaultState.SaveWalletStateToDir(IssuerVault, dir))
 
 	kcState := NewWalletState()
-	kcState.Issuers["keycloak"] = NewIssuer(IssuerKeycloak, "http://keycloak.test/realms/oid4vci")
-	require.NoError(t, kcState.SaveIssuer(dir, IssuerKeycloak))
+	kcState.Issuers[IssuerKeycloak] = NewIssuer(IssuerKeycloak, "http://keycloak.test/realms/oid4vci")
+	require.NoError(t, kcState.SaveWalletStateToDir(IssuerKeycloak, dir))
 
-	merged, err := LoadWalletState(dir)
+	merged, err := LoadWalletStateFromDir(dir)
 	require.NoError(t, err)
-	require.Equal(t, "vault-dev", merged.DefaultIssuer)
+	require.Equal(t, IssuerVault, merged.DefaultIssuer)
 	require.Len(t, merged.Issuers, 2)
-	require.Equal(t, IssuerVault, merged.Issuers["vault-dev"].Flavor)
-	require.Equal(t, IssuerKeycloak, merged.Issuers["keycloak"].Flavor)
+	require.Equal(t, IssuerVault, merged.Issuers[IssuerVault].Flavor)
+	require.Equal(t, IssuerKeycloak, merged.Issuers[IssuerKeycloak].Flavor)
 }
 
 func TestLoadNoFiles(t *testing.T) {
 	dir := t.TempDir()
 
-	state, err := LoadWalletState(dir)
+	state, err := LoadWalletStateFromDir(dir)
 	require.NoError(t, err)
 	require.Empty(t, state.Issuers)
 }
@@ -76,14 +101,14 @@ func TestSaveIssuerOnlyWritesMatchingKind(t *testing.T) {
 	dir := t.TempDir()
 
 	state := NewWalletState()
-	state.Issuers["vault-dev"] = NewIssuer(IssuerVault, "http://vault.test")
-	state.Issuers["keycloak"] = NewIssuer(IssuerKeycloak, "http://keycloak.test/realms/oid4vci")
-	require.NoError(t, state.SaveIssuer(dir, IssuerVault))
+	state.Issuers[IssuerVault] = NewIssuer(IssuerVault, "http://vault.test")
+	state.Issuers[IssuerKeycloak] = NewIssuer(IssuerKeycloak, "http://keycloak.test/realms/oid4vci")
+	require.NoError(t, state.SaveWalletStateToDir(IssuerVault, dir))
 
-	vaultOnly, err := LoadWalletState(dir)
+	vaultOnly, err := LoadWalletStateFromDir(dir)
 	require.NoError(t, err)
 	require.Len(t, vaultOnly.Issuers, 1)
-	require.Contains(t, vaultOnly.Issuers, "vault-dev")
+	require.Contains(t, vaultOnly.Issuers, IssuerVault)
 
 	require.NoFileExists(t, filepath.Join(dir, "wallet.keycloak.json"))
 }

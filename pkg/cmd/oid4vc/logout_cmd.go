@@ -11,10 +11,10 @@ import (
 
 // LogoutOpts holds logout's flag values — exported so tests can construct
 // one directly and call Run, instead of driving the cobra command through
-// its flags.
+// its flags. It embeds RootOpts for Issuer, shared with every subcommand.
 type LogoutOpts struct {
-	Issuer string
-	User   string
+	RootOpts
+	User string
 }
 
 // NewLogoutOpts constructs a LogoutOpts.
@@ -58,7 +58,7 @@ func (o *LogoutOpts) Run() error {
 	}
 
 	conn.Token = nil
-	if err := state.SaveIssuer(walletDir, issuer.Flavor); err != nil {
+	if err := state.SaveWalletState(issuer.Flavor); err != nil {
 		return err
 	}
 
@@ -76,7 +76,7 @@ func NewLogoutCmd() *cobra.Command {
 			return opts.Run()
 		},
 	}
-	cmd.Flags().StringVar(&opts.Issuer, "issuer", "", "Issuer alias to log out of (default: the wallet's default issuer)")
+	bindRootOpts(cmd, &opts.RootOpts)
 	cmd.Flags().StringVar(&opts.User, "user", "", "Username to log out (default: the issuer's default user)")
 	return cmd
 }

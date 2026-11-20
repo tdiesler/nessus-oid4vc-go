@@ -7,7 +7,7 @@ import (
 
 func TestMain(m *testing.M) {
 
-	SetupHomeDir()
+	HomeDir()
 
 	os.Exit(m.Run())
 }

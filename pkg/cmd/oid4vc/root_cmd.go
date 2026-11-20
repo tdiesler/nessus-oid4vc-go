@@ -8,14 +8,14 @@ import (
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/wallet"
 )
 
-// vaultIssuerAlias is the wallet alias ensureDefaultVaultIssuer uses.
-const vaultIssuerAlias = "vault"
+// RootOpts ================================================================================================================
 
-// walletDir is where the wallet CLI keeps its per-issuer-flavor state files
-// (see pkg/wallet), relative to the current working directory — matching
-// scripts/keycloak-setup's convention. A var, not a const, so tests can
-// point it at a temp directory.
-var walletDir = ".config"
+// RootOpts holds flags shared by every subcommand — each subcommand embeds
+// it and registers its fields as its own local flags via bindRootOpts,
+// rather than this being threaded through command constructors.
+type RootOpts struct {
+	Issuer string
+}
 
 // NewRootCmd builds the oid4vc command tree. With no subcommand it displays help.
 func NewRootCmd() *cobra.Command {
@@ -23,19 +23,30 @@ func NewRootCmd() *cobra.Command {
 		Use:   "oid4vc",
 		Short: "Holder wallet CLI for OID4VCI issuers (Keycloak, Vault)",
 	}
-	cmd.AddCommand(NewLoginCmd(), NewLogoutCmd())
+	cmd.AddCommand(NewLoginCmd(), NewLogoutCmd(), NewKeyCmd())
 	return cmd
 }
 
 // Functions ---------------------------------------------------------------------------------------------------------
 
+// bindRootOpts registers the --issuer flag RootOpts holds on cmd, bound
+// directly to root.Issuer. Called from each NewXCmd at command-construction
+// time, alongside that command's own flags — not from RunE, since cobra
+// parses a command's flags before RunE runs.
+func bindRootOpts(cmd *cobra.Command, root *RootOpts) {
+	cmd.Flags().StringVar(&root.Issuer, "issuer", "", "Issuer alias to operate against (default: the wallet's default issuer)")
+}
+
 // ensureDefaultVaultIssuer adds a vault-flavored Issuer to state, derived
 // from this project's own AppConfig, unless one is already present — the
 // Vault-backed demo needs no separate setup step the way
 // scripts/keycloak-setup's transform is for Keycloak, since everything it
-// needs is already in config/oid4vc-config.yml.
+// needs is already in config/oid4vc-config.yml. Its wallet alias is the
+// same string as its IssuerFlavor, matching the convention
+// scripts/keycloak-functions' transform also uses for the keycloak alias.
 func ensureDefaultVaultIssuer(state *wallet.WalletState) error {
-	if _, ok := state.Issuers[vaultIssuerAlias]; ok {
+	alias := string(wallet.IssuerVault)
+	if _, ok := state.Issuers[alias]; ok {
 		return nil
 	}
 
@@ -50,9 +61,9 @@ func ensureDefaultVaultIssuer(state *wallet.WalletState) error {
 	issuer.DefaultUser = co.UserAlice
 	issuer.Users[co.UserAlice] = wallet.NewConnection(cfg.OidcClient)
 
-	state.Issuers[vaultIssuerAlias] = issuer
+	state.Issuers[alias] = issuer
 	if state.DefaultIssuer == "" {
-		state.DefaultIssuer = vaultIssuerAlias
+		state.DefaultIssuer = alias
 	}
 	return nil
 }
@@ -62,11 +73,13 @@ func ensureDefaultVaultIssuer(state *wallet.WalletState) error {
 // empty — and the alias it was found under, so callers can mutate the
 // issuer and save the WalletState back.
 func resolveIssuer(alias string) (*wallet.WalletState, string, *wallet.Issuer, error) {
-	state, err := wallet.LoadWalletState(walletDir)
+
+	state, err := wallet.LoadWalletState()
 	if err != nil {
 		return nil, "", nil, err
 	}
-	if err := ensureDefaultVaultIssuer(state); err != nil {
+
+	if err = ensureDefaultVaultIssuer(state); err != nil {
 		return nil, "", nil, err
 	}
 

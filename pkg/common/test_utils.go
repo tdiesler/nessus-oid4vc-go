@@ -2,7 +2,6 @@ package common
 
 import (
 	"os"
-	"path/filepath"
 )
 
 // Fixed by scripts/vault-setup's holder persona.
@@ -12,27 +11,40 @@ const (
 	UserPassword = "password"
 )
 
-// SetupHomeDir discovers NESSUS_OID4VC_HOME as the repo root — the nearest
-// ancestor of the working directory containing go.mod — when not already
-// set. Walking up rather than assuming a fixed nesting depth keeps this
-// working regardless of how deep the calling package sits (e.g. pkg/wallet
-// vs. pkg/cmd/oid4vc).
-func SetupHomeDir() string {
-	homeDir := os.Getenv("NESSUS_OID4VC_HOME")
-	if homeDir == "" {
-		dir, _ := os.Getwd()
-		for {
-			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-				break
-			}
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
-			dir = parent
-		}
-		homeDir = dir
-		_ = os.Setenv("NESSUS_OID4VC_HOME", homeDir)
-	}
-	return homeDir
+// FileSnapshot ================================================================================================================
+
+// FileSnapshot captures a file's content so a test can mutate it and later
+// put it back, leaving no lasting effect on real on-disk state (e.g. a
+// wallet file under .config/) that other tests or manual runs also use.
+type FileSnapshot struct {
+	path    string
+	data    []byte
+	existed bool
 }
+
+// NewFileSnapshot captures path's current content. path not existing yet
+// is itself a valid thing to capture — Restore then removes it again.
+func NewFileSnapshot(path string) (*FileSnapshot, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &FileSnapshot{path: path}, nil
+		}
+		return nil, err
+	}
+	return &FileSnapshot{path: path, data: data, existed: true}, nil
+}
+
+// Restore writes path back to its original content, or removes it if
+// it didn't exist when s was captured.
+func (s *FileSnapshot) Restore() error {
+	if !s.existed {
+		if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	return os.WriteFile(s.path, s.data, 0o600)
+}
+
+// Functions ---------------------------------------------------------------------------------------------------------

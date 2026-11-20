@@ -78,3 +78,27 @@ var appConfig *AppConfig
 func configFile() string {
 	return filepath.Join(os.Getenv("NESSUS_OID4VC_HOME"), "config", "oid4vc-config.yml")
 }
+
+// Functions -----------------------------------------------------------------------------------------------------------
+
+// HomeDir discovers NESSUS_OID4VC_HOME as the repo root — the nearest
+// ancestor of the working directory containing go.mod.
+func HomeDir() string {
+	homeDir := os.Getenv("NESSUS_OID4VC_HOME")
+	if homeDir == "" {
+		dir, _ := os.Getwd()
+		for {
+			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+				break
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+		homeDir = dir
+		_ = os.Setenv("NESSUS_OID4VC_HOME", homeDir)
+	}
+	return homeDir
+}

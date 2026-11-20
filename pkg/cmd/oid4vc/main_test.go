@@ -1,13 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/oid4vci"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/wallet"
 )
 
 // testOid4vciAddr and testRedirectUri are config/oid4vc-config.yml's real
@@ -29,8 +30,7 @@ const (
 // a terminal session wouldn't otherwise have running is the oid4vci server
 // itself, so TestMain starts that.
 func TestMain(m *testing.M) {
-	co.SetupHomeDir()
-	walletDir = filepath.Join(co.SetupHomeDir(), ".config")
+	co.HomeDir()
 
 	_ = os.Setenv("NESSUS_OID4VC_OID4VCI_ADDR", testOid4vciAddr)
 	_ = os.Setenv("NESSUS_OID4VC_VAULT_REDIRECTURI", testRedirectUri)
@@ -46,33 +46,20 @@ func TestMain(m *testing.M) {
 		co.ErrorE(err)
 		os.Exit(1)
 	}
-	if err := as.Start(); err != nil {
+	if err = as.Start(); err != nil {
 		co.ErrorE(err)
 		os.Exit(1)
 	}
 
-	// Overwrite the vault issuer unconditionally rather than relying on
-	// ensureDefaultVaultIssuer's "only when missing" default: a leftover
-	// entry from an earlier run (manual or test) would otherwise keep
-	// pointing at whatever address that run used, not this one.
-	state, err := wallet.LoadWalletState(walletDir)
-	if err != nil {
-		co.ErrorE(err)
-		os.Exit(1)
-	}
-	vaultIssuer := wallet.NewIssuer(wallet.IssuerVault, as.Issuer)
-	vaultIssuer.RedirectUri = cfg.RedirectUri
-	vaultIssuer.DefaultClient = cfg.OidcClient
-	vaultIssuer.DefaultUser = co.UserAlice
-	vaultIssuer.Users[co.UserAlice] = wallet.NewConnection(cfg.OidcClient)
-	state.Issuers[vaultIssuerAlias] = vaultIssuer
-	if err := state.SaveIssuer(walletDir, wallet.IssuerVault); err != nil {
-		co.ErrorE(err)
-		os.Exit(1)
-	}
+	defer func() { _ = as.Shutdown() }()
 
-	code := m.Run()
+	os.Exit(m.Run())
+}
 
-	_ = as.Shutdown()
-	os.Exit(code)
+func takeWalletSnapshot(t *testing.T, flavor string) *co.FileSnapshot {
+	walletDir := filepath.Join(co.HomeDir(), ".config")
+	fileName := fmt.Sprintf("wallet.%s.json", flavor)
+	snapshot, err := co.NewFileSnapshot(filepath.Join(walletDir, fileName))
+	require.NoError(t, err)
+	return snapshot
 }

@@ -13,9 +13,9 @@ import (
 
 // LoginOpts holds login's flag values — exported so tests can construct one
 // directly and call Run, instead of driving the cobra command through its
-// flags.
+// flags. It embeds RootOpts for Issuer, shared with every subcommand.
 type LoginOpts struct {
-	Issuer   string
+	RootOpts
 	Client   string
 	User     string
 	Password string
@@ -102,7 +102,7 @@ func (o *LoginOpts) Run() error {
 	}
 	issuer.DefaultUser = username
 
-	if err := state.SaveIssuer(walletDir, issuer.Flavor); err != nil {
+	if err := state.SaveWalletState(issuer.Flavor); err != nil {
 		return err
 	}
 
@@ -120,7 +120,7 @@ func NewLoginCmd() *cobra.Command {
 			return opts.Run()
 		},
 	}
-	cmd.Flags().StringVar(&opts.Issuer, "issuer", "", "Issuer alias to log in against (default: the wallet's default issuer)")
+	bindRootOpts(cmd, &opts.RootOpts)
 	cmd.Flags().StringVar(&opts.Client, "client", "", "OAuth client ID (default: the issuer's default client)")
 	cmd.Flags().StringVar(&opts.User, "user", "", "Username (default: the issuer's default user)")
 	cmd.Flags().StringVar(&opts.Password, "password", "", "Password (prompted if not given, headless mode only)")

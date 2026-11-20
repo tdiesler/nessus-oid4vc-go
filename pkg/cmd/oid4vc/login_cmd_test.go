@@ -5,23 +5,22 @@ import (
 
 	"github.com/stretchr/testify/require"
 	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
+	"github.com/tdiesler/nessus-oid4vc-go/pkg/wallet"
 )
 
 // TestLogin drives login then logout headlessly against each flavor — a
 // real AuthorizationServer (fronting the real Vault) for "vault", and the
 // real Keycloak realm scripts/keycloak-setup already configured for
 // "keycloak" — confirming both the session a login establishes and its
-// removal on logout persist to the wallet's on-disk state. The keycloak
-// case is skipped when that realm isn't configured (see AGENTS.md's
-// Testing section).
+// removal on logout persist to the wallet's on-disk state.
 func TestLogin(t *testing.T) {
 	cases := []struct {
 		flavor   string
 		username string
 		password string
 	}{
-		{flavor: "vault", username: co.UserAlice, password: co.UserPassword},
-		{flavor: "keycloak", username: co.UserAlice, password: co.UserPassword},
+		{flavor: wallet.IssuerVault, username: co.UserAlice, password: co.UserPassword},
+		{flavor: wallet.IssuerKeycloak, username: co.UserAlice, password: co.UserPassword},
 	}
 
 	for _, c := range cases {

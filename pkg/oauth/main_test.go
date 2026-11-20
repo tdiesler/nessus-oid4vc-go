@@ -9,7 +9,7 @@ import (
 
 func TestMain(m *testing.M) {
 
-	co.SetupHomeDir()
+	co.HomeDir()
 
 	os.Exit(m.Run())
 }
