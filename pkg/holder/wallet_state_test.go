@@ -1,4 +1,4 @@
-package wallet
+package holder
 
 import (
 	"encoding/json"
@@ -69,24 +69,24 @@ func TestTokenExpired(t *testing.T) {
 	require.False(t, token.Expired())
 }
 
-func TestLoadMergesPerKindFiles(t *testing.T) {
+func TestLoadMergesPerAliasFiles(t *testing.T) {
 	dir := t.TempDir()
 
-	vaultState := NewWalletState()
-	vaultState.DefaultIssuer = IssuerVault
-	vaultState.Issuers[IssuerVault] = NewIssuer(IssuerVault, "http://vault.test/v1/identity/oidc/provider/oid4vc")
-	require.NoError(t, vaultState.SaveWalletStateToDir(IssuerVault, dir))
-
-	kcState := NewWalletState()
-	kcState.Issuers[IssuerKeycloak] = NewIssuer(IssuerKeycloak, "http://keycloak.test/realms/oid4vci")
-	require.NoError(t, kcState.SaveWalletStateToDir(IssuerKeycloak, dir))
+	state := NewWalletState()
+	state.DefaultIssuer = IssuerVault
+	state.Issuers[IssuerVault] = NewIssuer(IssuerVault, "http://vault.test/v1/identity/oidc/provider/oid4vc")
+	state.Issuers[IssuerKeycloak] = NewIssuer(IssuerKeycloak, "http://keycloak.test/realms/oid4vci")
+	require.NoError(t, state.SaveWalletStateToDir(IssuerVault, dir))
+	require.NoError(t, state.SaveWalletStateToDir(IssuerKeycloak, dir))
 
 	merged, err := LoadWalletStateFromDir(dir)
 	require.NoError(t, err)
 	require.Equal(t, IssuerVault, merged.DefaultIssuer)
 	require.Len(t, merged.Issuers, 2)
-	require.Equal(t, IssuerVault, merged.Issuers[IssuerVault].Flavor)
-	require.Equal(t, IssuerKeycloak, merged.Issuers[IssuerKeycloak].Flavor)
+	require.Equal(t, IssuerVault, merged.Issuers[IssuerVault].Alias)
+	require.Equal(t, IssuerKeycloak, merged.Issuers[IssuerKeycloak].Alias)
+	require.True(t, merged.Issuers[IssuerVault].Default)
+	require.False(t, merged.Issuers[IssuerKeycloak].Default)
 }
 
 func TestLoadNoFiles(t *testing.T) {
@@ -97,7 +97,7 @@ func TestLoadNoFiles(t *testing.T) {
 	require.Empty(t, state.Issuers)
 }
 
-func TestSaveIssuerOnlyWritesMatchingKind(t *testing.T) {
+func TestSaveIssuerOnlyWritesItsOwnFile(t *testing.T) {
 	dir := t.TempDir()
 
 	state := NewWalletState()

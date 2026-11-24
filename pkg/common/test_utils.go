@@ -15,7 +15,7 @@ const (
 
 // FileSnapshot captures a file's content so a test can mutate it and later
 // put it back, leaving no lasting effect on real on-disk state (e.g. a
-// wallet file under .config/) that other tests or manual runs also use.
+// holder file under .config/) that other tests or manual runs also use.
 type FileSnapshot struct {
 	path    string
 	data    []byte

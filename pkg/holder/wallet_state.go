@@ -1,9 +1,8 @@
-package wallet
+package holder
 
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,7 +14,7 @@ import (
 	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
-// IssuerFlavor identifies which backend an Issuer authenticates against.
+// Flavor values identifying which backend an Issuer authenticates against.
 const (
 	IssuerKeycloak = "keycloak"
 	IssuerVault    = "vault"
@@ -23,13 +22,15 @@ const (
 
 // WalletState ===========================================================================================================
 
-// WalletState is the holder wallet's full picture of the issuers it knows
-// about, merged from the per-kind files under its wallet directory (see
-// LoadWalletStateFromDir), keyed by a short local alias — e.g. a Keycloak realm name, or a
-// chosen name for a Vault OIDC provider.
+// WalletState is the holder holder's full picture of the issuers it knows
+// about, merged from the holder directory's one-file-per-issuer
+// holder.<alias>.json files (see LoadWalletStateFromDir), keyed by a short
+// local alias — e.g. a Keycloak realm name, or a chosen name for a Vault
+// OIDC provider — taken from each file's own name. It is never itself
+// marshaled: each Issuer is (de)serialized to its own file.
 type WalletState struct {
-	DefaultIssuer string             `json:"defaultIssuer,omitempty"`
-	Issuers       map[string]*Issuer `json:"issuers,omitempty"`
+	DefaultIssuer string
+	Issuers       map[string]*Issuer
 }
 
 // NewWalletState constructs an empty WalletState.
@@ -39,16 +40,19 @@ func NewWalletState() *WalletState {
 	}
 }
 
-// LoadWalletState loads the wallet state from this project's own .config
+// LoadWalletState loads the holder state from this project's own .config
 // directory (see pkg/common.HomeDir).
 func LoadWalletState() (*WalletState, error) {
 	return LoadWalletStateFromDir(filepath.Join(co.HomeDir(), ".config"))
 }
 
-// LoadWalletStateFromDir reads every wallet.*.json file present under dir and merges them
-// into one WalletState. A missing directory, or no matching files, yields
-// an empty WalletState rather than an error — there's simply nothing
-// configured yet.
+// LoadWalletStateFromDir reads every holder.<alias>.json file present under
+// dir — each holding exactly one Issuer — and merges them into one
+// WalletState keyed by the alias taken from the file name. A missing
+// directory, or no matching files, yields an empty WalletState rather than
+// an error — there's simply nothing configured yet. The issuer marked
+// Default (there should be at most one) becomes the WalletState's
+// DefaultIssuer.
 func LoadWalletStateFromDir(dir string) (*WalletState, error) {
 	matches, err := filepath.Glob(filepath.Join(dir, "wallet.*.json"))
 	if err != nil {
@@ -61,48 +65,43 @@ func LoadWalletStateFromDir(dir string) (*WalletState, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", path, err)
 		}
-		var part WalletState
-		if err := json.Unmarshal(data, &part); err != nil {
+		var issuer Issuer
+		if err := json.Unmarshal(data, &issuer); err != nil {
 			return nil, fmt.Errorf("parse %s: %w", path, err)
 		}
-		if part.DefaultIssuer != "" {
-			merged.DefaultIssuer = part.DefaultIssuer
+		alias := aliasFromWalletFile(path)
+		merged.Issuers[alias] = &issuer
+		if issuer.Default {
+			merged.DefaultIssuer = alias
 		}
-		maps.Copy(merged.Issuers, part.Issuers)
 	}
 	return merged, nil
 }
 
-// SaveWalletState persists kind's issuers from w — and DefaultIssuer, when it
-// names one of them — into dir's dedicated wallet.<kind>.json file,
-// leaving every other kind's file untouched.
-func (w *WalletState) SaveWalletState(flavor string) error {
-	return w.SaveWalletStateToDir(flavor, filepath.Join(co.HomeDir(), ".config"))
+// SaveWalletState persists alias's Issuer from w into dir's dedicated
+// holder.<alias>.json file, leaving every other issuer's file untouched.
+func (w *WalletState) SaveWalletState(alias string) error {
+	return w.SaveWalletStateToDir(alias, filepath.Join(co.HomeDir(), ".config"))
 }
 
-// SaveWalletStateToDir persists kind's issuers from w — and DefaultIssuer, when it
-// names one of them — into dir's dedicated wallet.<kind>.json file,
-// leaving every other kind's file untouched.
-func (w *WalletState) SaveWalletStateToDir(flavor string, dir string) error {
-	part := NewWalletState()
-	for alias, issuer := range w.Issuers {
-		if issuer.Flavor == flavor {
-			part.Issuers[alias] = issuer
-		}
+// SaveWalletStateToDir persists alias's Issuer from w into dir's dedicated
+// holder.<alias>.json file, leaving every other issuer's file untouched.
+func (w *WalletState) SaveWalletStateToDir(alias string, dir string) error {
+	issuer, ok := w.Issuers[alias]
+	if !ok {
+		return fmt.Errorf("no issuer %q in holder state", alias)
 	}
-	if _, ok := part.Issuers[w.DefaultIssuer]; ok {
-		part.DefaultIssuer = w.DefaultIssuer
-	}
+	issuer.Default = alias == w.DefaultIssuer
 
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create %s: %w", dir, err)
 	}
-	data, err := json.MarshalIndent(part, "", "  ")
+	data, err := json.MarshalIndent(issuer, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal wallet state: %w", err)
+		return fmt.Errorf("marshal issuer %q: %w", alias, err)
 	}
-	path := filepath.Join(dir, fmt.Sprintf("wallet.%s.json", flavor))
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	path := filepath.Join(dir, fmt.Sprintf("wallet.%s.json", alias))
+	if err = os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
@@ -110,7 +109,7 @@ func (w *WalletState) SaveWalletStateToDir(flavor string, dir string) error {
 
 // Issuer =================================================================================================================
 
-// Issuer is one OIDC authorization server the wallet can log in against: a
+// Issuer is one OIDC authorization server the holder can log in against: a
 // Keycloak realm, or a Vault OIDC provider. IssuerURL is the full discovery
 // base — IssuerURL + "/.well-known/openid-configuration" resolves its
 // endpoints — so for Keycloak it already includes the realm path segment;
@@ -118,7 +117,8 @@ func (w *WalletState) SaveWalletStateToDir(flavor string, dir string) error {
 // browser-driven login completes through; it must be one of DefaultClient's
 // registered redirect URIs at this Issuer.
 type Issuer struct {
-	Flavor        string                 `json:"flavor"`
+	Alias         string                 `json:"alias"`
+	Default       bool                   `json:"default,omitempty"`
 	IssuerURL     string                 `json:"issuerUrl"`
 	RedirectUri   string                 `json:"redirectUri,omitempty"`
 	DefaultClient string                 `json:"defaultClient,omitempty"`
@@ -127,9 +127,9 @@ type Issuer struct {
 }
 
 // NewIssuer constructs an Issuer of kind for the authorization server at issuerURL.
-func NewIssuer(flavor string, issuerURL string) *Issuer {
+func NewIssuer(alias, issuerURL string) *Issuer {
 	return &Issuer{
-		Flavor:    flavor,
+		Alias:     alias,
 		IssuerURL: issuerURL,
 		Users:     map[string]*Connection{},
 	}
@@ -156,12 +156,6 @@ func NewConnection(clientId string) *Connection {
 	}
 }
 
-// WithToken sets c's Token.
-func (c *Connection) WithToken(token *Token) *Connection {
-	c.Token = token
-	return c
-}
-
 // AddHolderKey generates a fresh ES256 holder key for c — named kid if
 // given, or auto-derived as "es256#<n>" (one past the highest existing
 // "es256#" suffix) otherwise — replacing any existing key with the same
@@ -182,6 +176,43 @@ func (c *Connection) AddHolderKey(kid string) (string, error) {
 	c.Keys = append(c.Keys, key)
 	c.DefaultKey = kid
 	return kid, nil
+}
+
+// HolderKey returns c's holder key named kid — or, when kid is empty, c's
+// DefaultKey, or failing that its first key — whichever is the most
+// specific selection actually available.
+func (c *Connection) HolderKey(kid string) (jose.JSONWebKey, error) {
+	if kid == "" {
+		kid = c.DefaultKey
+	}
+	if kid != "" {
+		for _, key := range c.Keys {
+			if key.KeyID == kid {
+				return key, nil
+			}
+		}
+		return jose.JSONWebKey{}, fmt.Errorf("no holder key %q", kid)
+	}
+	if len(c.Keys) == 0 {
+		return jose.JSONWebKey{}, fmt.Errorf("no holder key")
+	}
+	return c.Keys[0], nil
+}
+
+// SetCredential stores credential under key, initializing Credentials if c
+// was loaded from a holder file that omitted it — omitempty drops the
+// "credentials" key entirely once there are none to write.
+func (c *Connection) SetCredential(key, credential string) {
+	if c.Credentials == nil {
+		c.Credentials = map[string]string{}
+	}
+	c.Credentials[key] = credential
+}
+
+// WithToken sets c's Token.
+func (c *Connection) WithToken(token *Token) *Connection {
+	c.Token = token
+	return c
 }
 
 // Token ===================================================================================================================
@@ -209,6 +240,13 @@ func (t *Token) Expired() bool {
 	return time.Now().After(t.ExpiresAt)
 }
 
+// ExpiresWithin reports whether t's ExpiresAt is within d of now — for
+// refreshing a token shortly before it actually expires, rather than
+// waiting for a request to fail first.
+func (t *Token) ExpiresWithin(d time.Duration) bool {
+	return time.Now().Add(d).After(t.ExpiresAt)
+}
+
 // AuthorizationDetail =====================================================================================================
 
 // AuthorizationDetail is one entry of an OAuth 2.0 Rich Authorization
@@ -233,6 +271,15 @@ func NewAuthorizationDetail(detailType, credentialConfigurationId string, creden
 }
 
 // Functions ---------------------------------------------------------------------------------------------------------
+
+// aliasFromWalletFile derives an issuer's alias from its holder.<alias>.json
+// file name.
+func aliasFromWalletFile(path string) string {
+	name := filepath.Base(path)
+	name = strings.TrimPrefix(name, "wallet.")
+	name = strings.TrimSuffix(name, ".json")
+	return name
+}
 
 // newHolderKey generates a fresh ES256 (P-256) key with the given key ID,
 // via go-jose's own key generator rather than assembling the curve/key-size

@@ -31,7 +31,7 @@ func NewMux(as *AuthorizationServer) *http.ServeMux {
 // loginFormTemplate renders a minimal userpass login form: client_id,
 // redirect_uri and state are threaded through as hidden fields rather than
 // server-side session state, since there's nothing sensitive in them that
-// the wallet's own user-agent didn't already supply in the GET request.
+// the holder's own user-agent didn't already supply in the GET request.
 var loginFormTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE html>
 <html>
 <body>

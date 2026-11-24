@@ -10,14 +10,8 @@ import (
 )
 
 func main() {
-	cfg, err := co.GetAppConfig()
-	if err != nil {
-		co.ErrorE(err)
-		os.Exit(1)
-	}
 
-	issuer := "http://" + cfg.Oid4vciAddr
-	as, err := oid4vci.NewAuthorizationServer(issuer, cfg.Oid4vciAddr)
+	as, err := oid4vci.NewAuthorizationServerFromConfig()
 	if err != nil {
 		co.ErrorE(err)
 		os.Exit(1)
@@ -26,7 +20,7 @@ func main() {
 		co.ErrorE(err)
 		os.Exit(1)
 	}
-	co.InfoF("oid4vci AuthorizationServer listening on %s", cfg.Oid4vciAddr)
+	co.InfoF("oid4vci AuthorizationServer listening on %s", as.BaseURL)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)

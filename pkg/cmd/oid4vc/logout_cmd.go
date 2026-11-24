@@ -1,10 +1,9 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/wallet"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
+	"github.com/tdiesler/nessus-oid4vc-go/pkg/holder"
 )
 
 // LogoutOpts ==============================================================================================================
@@ -24,45 +23,22 @@ func NewLogoutOpts() *LogoutOpts {
 
 // Run ends o.User's session against o.Issuer.
 func (o *LogoutOpts) Run() error {
-	state, alias, issuer, err := resolveIssuer(o.Issuer)
+	w, err := holder.NewWallet(o.Issuer, o.User)
 	if err != nil {
 		return err
 	}
 
-	username := o.User
-	if username == "" {
-		username = issuer.DefaultUser
+	iss := w.Issuer().Alias
+	ok, err := w.Logout()
+	if err != nil {
+		return err
 	}
-	if username == "" {
-		return fmt.Errorf("no user specified and issuer %q has no default user", alias)
-	}
-
-	conn, ok := issuer.Users[username]
-	if !ok || conn.Token == nil {
-		fmt.Printf("No active session for %q against issuer %q\n", username, alias)
+	if !ok {
+		co.InfoF("No active session for %q with issuer %q\n", w.Username(), iss)
 		return nil
 	}
 
-	metadata, err := wallet.DiscoverMetadata(issuer.IssuerURL)
-	if err != nil {
-		return err
-	}
-	switch {
-	case metadata.EndSessionEndpoint != "":
-		err = wallet.EndSession(metadata.EndSessionEndpoint, conn.ClientId, conn.Token)
-	case metadata.RevocationEndpoint != "":
-		err = wallet.RevokeToken(metadata.RevocationEndpoint, conn.ClientId, conn.Token.AccessToken)
-	}
-	if err != nil {
-		return err
-	}
-
-	conn.Token = nil
-	if err := state.SaveWalletState(issuer.Flavor); err != nil {
-		return err
-	}
-
-	fmt.Printf("Logged out %q from issuer %q\n", username, alias)
+	co.InfoF("Logged out %q from issuer %q\n", w.Username(), iss)
 	return nil
 }
 

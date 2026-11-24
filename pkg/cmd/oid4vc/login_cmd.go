@@ -5,7 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/wallet"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
+	"github.com/tdiesler/nessus-oid4vc-go/pkg/holder"
 	"golang.org/x/term"
 )
 
@@ -30,30 +31,11 @@ func NewLoginOpts() *LoginOpts {
 }
 
 // Run authenticates as o.User against o.Issuer, storing the resulting
-// session in the wallet.
+// session in the holder.
 func (o *LoginOpts) Run() error {
-	state, alias, issuer, err := resolveIssuer(o.Issuer)
+	w, err := holder.NewWallet(o.Issuer, o.User)
 	if err != nil {
 		return err
-	}
-	if issuer.RedirectUri == "" {
-		return fmt.Errorf("issuer %q has no redirectUri configured", alias)
-	}
-
-	clientId := o.Client
-	if clientId == "" {
-		clientId = issuer.DefaultClient
-	}
-	if clientId == "" {
-		return fmt.Errorf("no client specified and issuer %q has no default client", alias)
-	}
-
-	username := o.User
-	if username == "" {
-		username = issuer.DefaultUser
-	}
-	if username == "" {
-		return fmt.Errorf("no user specified and issuer %q has no default user", alias)
 	}
 
 	password := o.Password
@@ -70,43 +52,12 @@ func (o *LoginOpts) Run() error {
 		password = string(passwordBytes)
 	}
 
-	metadata, err := wallet.DiscoverMetadata(issuer.IssuerURL)
-	if err != nil {
+	if err = w.Login(o.Client, o.Scope, o.Browser, password); err != nil {
 		return err
 	}
 
-	browserLogin := wallet.NewBrowserLogin(metadata.AuthorizationEndpoint, clientId, issuer.RedirectUri, o.Scope)
-	var code string
-	if o.Browser {
-		code, err = browserLogin.Interactive()
-	} else {
-		code, err = browserLogin.Headless(username, password)
-	}
-	if err != nil {
-		return err
-	}
-
-	token, authDetails, err := wallet.ExchangeAuthorizationCode(metadata.TokenEndpoint, clientId, code, issuer.RedirectUri)
-	if err != nil {
-		return err
-	}
-
-	conn, ok := issuer.Users[username]
-	if !ok {
-		conn = wallet.NewConnection(clientId)
-		issuer.Users[username] = conn
-	}
-	conn.WithToken(token)
-	if len(authDetails) > 0 {
-		conn.AuthorizationDetails = authDetails
-	}
-	issuer.DefaultUser = username
-
-	if err := state.SaveWalletState(issuer.Flavor); err != nil {
-		return err
-	}
-
-	fmt.Printf("Logged in as %q against issuer %q\n", username, alias)
+	iss := w.Issuer().Alias
+	co.InfoF("Logged in as %q with issuer %q\n", w.Username(), iss)
 	return nil
 }
 

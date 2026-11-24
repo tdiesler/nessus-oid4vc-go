@@ -52,7 +52,7 @@ func NewAuthorizationServer(issuer, addr string) (*AuthorizationServer, error) {
 	// own OIDC provider and so needs Vault's generated client_id), this
 	// server's client registry is entirely its own, so there's nothing to
 	// resolve from Vault. It's a public client: the caller is a holder
-	// wallet, which can't be expected to hold a secret.
+	// holder, which can't be expected to hold a secret.
 	clients := map[string]*Client{
 		cfg.OidcClient: NewClient(cfg.OidcClient, cfg.RedirectUri),
 	}
@@ -77,6 +77,17 @@ func NewAuthorizationServer(issuer, addr string) (*AuthorizationServer, error) {
 		listener: listener,
 		signer:   signer,
 	}, nil
+}
+
+// NewAuthorizationServerFromConfig constructs an AuthorizationServer using
+// this project's own AppConfig: cfg.Oid4vciAddr as both its issuer
+// identity and its bind address.
+func NewAuthorizationServerFromConfig() (*AuthorizationServer, error) {
+	cfg, err := co.GetAppConfig()
+	if err != nil {
+		return nil, err
+	}
+	return NewAuthorizationServer("http://"+cfg.Oid4vciAddr, cfg.Oid4vciAddr)
 }
 
 // Start begins serving on this server's bound listener in the background,
@@ -223,7 +234,7 @@ func (as *AuthorizationServer) WriteKeyValueClaims(accessToken, path, alias stri
 // Client ===============================================================================================================
 
 // Client is a public OAuth 2.0 client registered with this authorization
-// server (RFC 6749 §2.1) — the role a holder wallet plays, which can't be
+// server (RFC 6749 §2.1) — the role a holder holder plays, which can't be
 // expected to hold a secret. This is this service's own client registry,
 // distinct from Vault's identity/oidc/client: fronting Vault means client
 // registration becomes this service's concern too, not Vault's. Compare

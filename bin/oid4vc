@@ -1,0 +1,4 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec go run "$SCRIPT_DIR/../pkg/cmd/oid4vc" "$@"

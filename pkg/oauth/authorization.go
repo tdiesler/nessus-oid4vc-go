@@ -85,7 +85,7 @@ func NewAuthorizationAccessor() (*AuthorizationAccessor, error) {
 }
 
 // CodeFlowAuthorization drives an OAuth 2.0 Authorization Code flow against
-// Vault's own OIDC provider, the way a wallet would, and returns the
+// Vault's own OIDC provider, the way a holder would, and returns the
 // resulting authorization code. The interactive login itself is delegated
 // to a BrowserAuthorizer.
 func (s *AuthorizationAccessor) CodeFlowAuthorization(client, scope, username, password string) (string, error) {
@@ -115,7 +115,7 @@ func (s *AuthorizationAccessor) CodeFlowAuthorization(client, scope, username, p
 		WithRedirectUri(cfg.RedirectUri).
 		WithScope(scope)
 
-	// Complete it interactively, as a wallet's user-agent would.
+	// Complete it interactively, as a holder's user-agent would.
 	authorizer, err := NewChromeAuthorizer()
 	if err != nil {
 		return "", err

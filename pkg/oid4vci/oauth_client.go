@@ -15,11 +15,11 @@ import (
 // OAuthClient ===============================================================================================================
 
 // OAuthClient drives an OAuth 2.0 Authorization Code flow against an
-// AuthorizationServer from the client's side — the role a wallet plays
+// AuthorizationServer from the client's side — the role a holder plays
 // against this service, as a public client (RFC 6749 §2.1), with no
 // secret. Unlike Client (this server's registration record for a caller),
 // OAuthClient is the caller itself; it has no dependency on testing and is
-// just as usable from a real wallet simulator or CLI as from a test.
+// just as usable from a real holder simulator or CLI as from a test.
 type OAuthClient struct {
 	baseUrl     string
 	clientId    string
@@ -53,7 +53,7 @@ func NewOAuthClient() (*OAuthClient, error) {
 	return &client, nil
 }
 
-// Authorize submits username/password to /authorize, the way a wallet's
+// Authorize submits username/password to /authorize, the way a holder's
 // user-agent submitting a rendered login form would, and returns the
 // resulting authorization code from the redirect callback.
 func (c *OAuthClient) Authorize(username, password string) (string, error) {

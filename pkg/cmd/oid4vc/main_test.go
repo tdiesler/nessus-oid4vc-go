@@ -26,7 +26,7 @@ const (
 // directory, with this project's real AppConfig overridden only to shift
 // Oid4vci.Addr/Vault.RedirectURI onto testOid4vciAddr/testRedirectUri for
 // this process — so an "alice" session a test logs into is the same shape
-// of wallet state a manual `oid4vc login` run would produce. The one thing
+// of holder state a manual `oid4vc login` run would produce. The one thing
 // a terminal session wouldn't otherwise have running is the oid4vci server
 // itself, so TestMain starts that.
 func TestMain(m *testing.M) {
@@ -35,13 +35,7 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv("NESSUS_OID4VC_OID4VCI_ADDR", testOid4vciAddr)
 	_ = os.Setenv("NESSUS_OID4VC_VAULT_REDIRECTURI", testRedirectUri)
 
-	cfg, err := co.GetAppConfig()
-	if err != nil {
-		co.ErrorE(err)
-		os.Exit(1)
-	}
-
-	as, err := oid4vci.NewAuthorizationServer("http://"+cfg.Oid4vciAddr, cfg.Oid4vciAddr)
+	as, err := oid4vci.NewAuthorizationServerFromConfig()
 	if err != nil {
 		co.ErrorE(err)
 		os.Exit(1)
@@ -58,7 +52,7 @@ func TestMain(m *testing.M) {
 
 func takeWalletSnapshot(t *testing.T, flavor string) *co.FileSnapshot {
 	walletDir := filepath.Join(co.HomeDir(), ".config")
-	fileName := fmt.Sprintf("wallet.%s.json", flavor)
+	fileName := fmt.Sprintf("holder.%s.json", flavor)
 	snapshot, err := co.NewFileSnapshot(filepath.Join(walletDir, fileName))
 	require.NoError(t, err)
 	return snapshot

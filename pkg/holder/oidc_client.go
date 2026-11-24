@@ -1,4 +1,4 @@
-package wallet
+package holder
 
 import (
 	"fmt"
@@ -12,8 +12,8 @@ import (
 
 // Functions ---------------------------------------------------------------------------------------------------------
 
-// DiscoverMetadata fetches issuerURL's OpenID Connect discovery document.
-func DiscoverMetadata(issuerURL string) (*co.AuthorizationServerMetadata, error) {
+// discoverMetadata fetches issuerURL's OpenID Connect discovery document.
+func discoverMetadata(issuerURL string) (*co.AuthorizationServerMetadata, error) {
 	req := co.NewHttpGetRequest(issuerURL + "/.well-known/openid-configuration")
 	metadata, err := req.Fetch[co.AuthorizationServerMetadata](http.DefaultClient)
 	if err != nil {
@@ -26,7 +26,7 @@ func DiscoverMetadata(issuerURL string) (*co.AuthorizationServerMetadata, error)
 // logout endpoint), authenticating as clientId. Keycloak answers with 204
 // No Content, so this doesn't go through co.HttpPostRequest.Post, which
 // always expects a JSON body.
-func EndSession(endSessionEndpoint, clientId string, token *Token) error {
+func endSession(endSessionEndpoint, clientId string, token *Token) error {
 	form := url.Values{}
 	form.Set("client_id", clientId)
 	form.Set("refresh_token", token.RefreshToken)
@@ -44,11 +44,11 @@ func EndSession(endSessionEndpoint, clientId string, token *Token) error {
 	return nil
 }
 
-// ExchangeAuthorizationCode redeems code for tokens at tokenEndpoint,
+// exchangeAuthorizationCode redeems code for tokens at tokenEndpoint,
 // authenticating as clientId — a public client, so no client secret. It
 // also returns any authorization_details the token response carries
 // (RFC 9396), naming the credential(s) this session is now entitled to.
-func ExchangeAuthorizationCode(tokenEndpoint, clientId, code, redirectUri string) (*Token, []AuthorizationDetail, error) {
+func exchangeAuthorizationCode(tokenEndpoint, clientId, code, redirectUri string) (*Token, []AuthorizationDetail, error) {
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("client_id", clientId)
@@ -64,9 +64,29 @@ func ExchangeAuthorizationCode(tokenEndpoint, clientId, code, redirectUri string
 	return token, body.AuthorizationDetails, nil
 }
 
-// RevokeToken revokes token at revocationEndpoint (RFC 7009), identifying
+// refreshToken redeems token's refresh token for a new Token at
+// tokenEndpoint, authenticating as clientId — a public client, so no
+// client secret. Keycloak issues a new refresh token alongside the new
+// access token (RFC 6749 §6), so callers must replace their stored Token
+// with the one returned here, not just its access token.
+func refreshToken(tokenEndpoint, clientId string, token *Token) (*Token, []AuthorizationDetail, error) {
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("client_id", clientId)
+	form.Set("refresh_token", token.RefreshToken)
+
+	req := co.HttpPostRequest{Endpoint: tokenEndpoint}
+	body, err := req.Post[tokenResponse](http.DefaultClient, form)
+	if err != nil {
+		return nil, nil, fmt.Errorf("refresh token: %w", err)
+	}
+	refreshed := NewToken(body.AccessToken, body.RefreshToken, time.Now().Add(time.Duration(body.ExpiresIn)*time.Second))
+	return refreshed, body.AuthorizationDetails, nil
+}
+
+// revokeToken revokes token at revocationEndpoint (RFC 7009), identifying
 // itself as clientId — a public client, so no client secret.
-func RevokeToken(revocationEndpoint, clientId, token string) error {
+func revokeToken(revocationEndpoint, clientId, token string) error {
 	form := url.Values{}
 	form.Set("token", token)
 	form.Set("client_id", clientId)

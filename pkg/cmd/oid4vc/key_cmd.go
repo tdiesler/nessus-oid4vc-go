@@ -1,10 +1,9 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/wallet"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
+	"github.com/tdiesler/nessus-oid4vc-go/pkg/holder"
 )
 
 // NewKeyCmd builds the key command, grouping key management operations.
@@ -38,35 +37,18 @@ func NewKeyCreateOpts() *KeyCreateOpts {
 // Run generates an ES256 holder key for o.User against o.Issuer, named
 // o.Name if given, or auto-derived otherwise.
 func (o *KeyCreateOpts) Run() error {
-	state, alias, issuer, err := resolveIssuer(o.Issuer)
+	w, err := holder.NewWallet(o.Issuer, o.User)
 	if err != nil {
 		return err
 	}
 
-	username := o.User
-	if username == "" {
-		username = issuer.DefaultUser
-	}
-	if username == "" {
-		return fmt.Errorf("no user specified and issuer %q has no default user", alias)
-	}
-
-	conn, ok := issuer.Users[username]
-	if !ok {
-		conn = wallet.NewConnection(issuer.DefaultClient)
-		issuer.Users[username] = conn
-	}
-
-	kid, err := conn.AddHolderKey(o.Name)
+	kid, err := w.CreateKey(o.Name)
 	if err != nil {
 		return err
 	}
 
-	if err := state.SaveWalletState(issuer.Flavor); err != nil {
-		return err
-	}
-
-	fmt.Printf("Created ES256 holder key %q for %q against issuer %q\n", kid, username, alias)
+	iss := w.Issuer().Alias
+	co.InfoF("Created ES256 holder key %q for %q with issuer %q\n", kid, w.Username(), iss)
 	return nil
 }
 

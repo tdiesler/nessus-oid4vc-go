@@ -9,7 +9,7 @@ import (
 )
 
 // TestCodeFlowAuthorization drives Vault's own OIDC provider login page as
-// Alice's wallet/user-agent would, redeems the resulting authorization code
+// Alice's holder/user-agent would, redeems the resulting authorization code
 // at the token endpoint, and expects back a real access token.
 func TestCodeFlowAuthorization(t *testing.T) {
 	cfg, err := co.GetAppConfig()

@@ -41,16 +41,17 @@ else:
 " "${cred}"
 }
 
-# Converts the Java oid4vc CLI's wallet.json (realm-keyed, single server)
-# into the Go wallet CLI's Issuer-shaped wallet.keycloak.json (one file per
-# issuer flavor; see pkg/wallet), under the fixed alias "keycloak" — the
-# realm name still lives in issuerUrl, it's just not used as the map key,
-# since "oid4vci" (a common realm name here) would otherwise be confused
-# with this project's own oid4vci service. Carries over structural config
-# only (clientId, defaultKey, keys) — authorizationDetails, credentials,
-# and the access/refresh token + expiry are dropped: that session and
-# credential state is short-lived and gets re-established by the Go CLI's
-# own login, not migrated from the Java run.
+# Converts the Java oid4vc CLI's holder.json (realm-keyed, single server)
+# into the Go holder CLI's Issuer-shaped holder.keycloak.json — one file per
+# issuer, holding that Issuer directly (see pkg/holder) — under the fixed
+# alias "keycloak" encoded in the file name; the realm name still lives in
+# issuerUrl, it's just not used as the alias, since "oid4vci" (a common
+# realm name here) would otherwise be confused with this project's own
+# oid4vci service. Carries over structural config only (clientId,
+# defaultKey, keys) — authorizationDetails, credentials, and the
+# access/refresh token + expiry are dropped: that session and credential
+# state is short-lived and gets re-established by the Go CLI's own login,
+# not migrated from the Java run.
 transform_wallet_to_issuer_shape() {
   local java_wallet="${1:-.config/wallet.json}"
   local issuer_wallet="${2:-.config/wallet.keycloak.json}"
@@ -59,30 +60,24 @@ transform_wallet_to_issuer_shape() {
   jq --arg redirectUri "${redirect_uri}" '
     (.serverUrl) as $server
     | (.defaultRealm) as $realm
+    | .realms[$realm]
     | {
-        defaultIssuer: "keycloak",
-        issuers: {
-          keycloak: (
-            .realms[$realm]
-            | {
-                flavor: "keycloak",
-                issuerUrl: ($server + "/realms/" + $realm),
-                redirectUri: $redirectUri,
-                defaultClient: .defaultClient,
-                defaultUser: .defaultUser,
-                users: (
-                  .users
-                  | with_entries(
-                      .value = {
-                        clientId: .value.clientId,
-                        defaultKey: .value.defaultKey,
-                        keys: .value.keys
-                      }
-                    )
-                )
+        flavor: "keycloak",
+        default: true,
+        issuerUrl: ($server + "/realms/" + $realm),
+        redirectUri: $redirectUri,
+        defaultClient: .defaultClient,
+        defaultUser: .defaultUser,
+        users: (
+          .users
+          | with_entries(
+              .value = {
+                clientId: .value.clientId,
+                defaultKey: .value.defaultKey,
+                keys: .value.keys
               }
-          )
-        }
+            )
+        )
       }
   ' "${java_wallet}" > "${issuer_wallet}.tmp"
   mv "${issuer_wallet}.tmp" "${issuer_wallet}"

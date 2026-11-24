@@ -9,7 +9,7 @@ import (
 )
 
 // TestOAuthAuthorization drives this server's own Authorization Code flow
-// as Alice's wallet would — POST /authorize with her credentials, redeem
+// as Alice's holder would — POST /authorize with her credentials, redeem
 // the resulting code at /token — and expects back an access_token plus an
 // id_token that verifies against this server's own /jwks.json.
 func TestOAuthAuthorization(t *testing.T) {

@@ -225,9 +225,9 @@ for scope in oid4vc_boarding_pass_sd oid4vc_boarding_pass_jwt; do
     -s "credentialScopeName=${scope}"
 done
 
-# Configure wallet defaults
+# Configure holder defaults
 #
-rm -f .config/wallet.json
+rm -f .config/holder.json
 ${OID4VC} ${OID4VC_VERBOSE} config --server "http://${EXTERNAL_IP}:30800" --realm "${REALM}" --client "oid4vci-client"
 
 # Holder Key
@@ -243,20 +243,10 @@ for scope in "oid4vc_natural_person_jwt" "oid4vc_natural_person_sd"; do
   decode_vc "${vc_jwt}"
 done
 
-# Enforce credential-offer-required on auto-created natural person scopes
-#
-for scope_name in oid4vc_natural_person_jwt oid4vc_natural_person_sd; do
-  echo "Setting offer-required on scope '${scope_name}' ..."
-  SCOPE_ID=$(kcadm get client-scopes -r "${REALM}" --fields id,name 2>/dev/null \
-    | jq -r ".[] | select(.name==\"${scope_name}\") | .id")
-  kcadm update "client-scopes/${SCOPE_ID}" -r "${REALM}" \
-    -s 'attributes."vc.policy.offer.required"=true'
-done
-
-# Transform the Java CLI's wallet.json into the Go wallet CLI's
-# Issuer-shaped wallet.keycloak.json
+# Transform the Java CLI's holder.json into the Go holder CLI's
+# Issuer-shaped holder.keycloak.json
 #
 echo "Transforming wallet.json to wallet.keycloak.json ..."
-transform_wallet_to_issuer_shape .config/wallet.json .config/wallet.keycloak.json "${OAUTH_REDIRECT_URI}"
+transform_wallet_to_issuer_shape .config/holder.json .config/holder.keycloak.json "${OAUTH_REDIRECT_URI}"
 
 echo "Realm setup complete"

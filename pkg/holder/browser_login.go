@@ -1,4 +1,4 @@
-package wallet
+package holder
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -65,9 +66,23 @@ func (b *BrowserLogin) Headless(username, password string) (string, error) {
 	const passwordField = `input[name="password"]`
 	const submitControl = `button[type="submit"], input[type="submit"]`
 
+	if err := chromedp.Do(ctx, chromedp.Navigate(b.authorizeUrl())); err != nil {
+		return "", fmt.Errorf("load login page: %w", err)
+	}
+
+	// The authorization server can reject the request itself (e.g. a
+	// policy denying the requested scope) and show an error page instead
+	// of a login form — give the form a short window to appear rather
+	// than waiting out the full callback timeout for a field that's never
+	// coming, and surface what the page actually says instead.
+	formCtx, cancelForm := context.WithTimeout(ctx, 5*time.Second)
+	defer cancelForm()
+	if err := chromedp.Do(formCtx, chromedp.WaitVisible(chromedp.CSS(usernameField))); err != nil {
+		text, _ := chromedp.Run(ctx, chromedp.Text("body"))
+		return "", fmt.Errorf("login form did not appear: %s", strings.TrimSpace(text))
+	}
+
 	if err := chromedp.Do(ctx,
-		chromedp.Navigate(b.authorizeUrl()),
-		chromedp.WaitVisible(chromedp.CSS(usernameField)),
 		chromedp.SendKeys(chromedp.CSS(usernameField), username),
 		chromedp.SendKeys(chromedp.CSS(passwordField), password),
 		chromedp.Click(chromedp.CSS(submitControl)),
