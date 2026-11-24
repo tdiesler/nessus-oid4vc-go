@@ -33,6 +33,10 @@ func NewLoginOpts() *LoginOpts {
 // Run authenticates as o.User against o.Issuer, storing the resulting
 // session in the holder.
 func (o *LoginOpts) Run() error {
+	if o.User == "" {
+		return fmt.Errorf("--user is required")
+	}
+
 	w, err := holder.NewWallet(o.Issuer, o.User)
 	if err != nil {
 		return err
@@ -73,7 +77,7 @@ func NewLoginCmd() *cobra.Command {
 	}
 	bindRootOpts(cmd, &opts.RootOpts)
 	cmd.Flags().StringVar(&opts.Client, "client", "", "OAuth client ID (default: the issuer's default client)")
-	cmd.Flags().StringVar(&opts.User, "user", "", "Username (default: the issuer's default user)")
+	cmd.Flags().StringVar(&opts.User, "user", "", "Username (required)")
 	cmd.Flags().StringVar(&opts.Password, "password", "", "Password (prompted if not given, headless mode only)")
 	cmd.Flags().StringVar(&opts.Scope, "scope", opts.Scope, "OAuth scope")
 	cmd.Flags().BoolVar(&opts.Browser, "browser", false, "Open the system browser for login instead of driving it headlessly")

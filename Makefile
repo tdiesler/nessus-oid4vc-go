@@ -6,5 +6,5 @@ upgrade:
 vault-setup:
 	scripts/vault-setup
 
-oid4vc-test:
+test:
 	go test ./pkg/...

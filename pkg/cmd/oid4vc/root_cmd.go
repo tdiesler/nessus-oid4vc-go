@@ -15,17 +15,22 @@ type RootOpts struct {
 	Issuer string
 }
 
-// NewRootCmd builds the oid4vc command tree. With no subcommand it displays help.
+// NewRootCmd builds the oid4vc command tree. With no subcommand it enters
+// the interactive REPL (see NewReplCmd).
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "oid4vc",
 		Short: "OID4VC Wallet CLI",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return NewReplOpts().Run()
+		},
 	}
 	cmd.AddCommand(
 		NewLoginCmd(),
 		NewLogoutCmd(),
 		NewKeyCmd(),
-		NewVcCmd())
+		NewVcCmd(),
+		NewReplCmd())
 	return cmd
 }
 
