@@ -1,11 +1,8 @@
 # nessus-oid4vc-go
 
-A Go implementation exploring [OpenID for Verifiable Credential Issuance
-(OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
-and [OpenID for Verifiable Presentations
-(OID4VP)](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html),
-with the long-term goal of enabling **HashiCorp Vault** to act as an
-OID4VC Issuer.
+A Go implementation exploring [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
+and [OpenID for Verifiable Presentations (OID4VP)](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html),
+with the long-term goal of enabling **HashiCorp Vault** to act as an OID4VC Issuer.
 
 ## Why Vault
 

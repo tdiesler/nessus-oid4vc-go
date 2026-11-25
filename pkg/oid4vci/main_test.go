@@ -20,8 +20,7 @@ const testIssuer = "https://oid4vci.test.local"
 var authServer *AuthorizationServer
 
 func TestMain(m *testing.M) {
-
-	co.HomeDir()
+	co.InitLogging()
 
 	cfg, err := co.GetAppConfig()
 	if err != nil {
@@ -31,19 +30,15 @@ func TestMain(m *testing.M) {
 
 	// Start once for the whole package: AuthorizationServer binds a fixed,
 	// configured address (cfg.Oid4vci.Addr).
-	as, err := NewAuthorizationServer(testIssuer, cfg.Oid4vciAddr)
+	as, err := StartTestIssuerServer(cfg.Oid4vciAddr)
 	if err != nil {
-		co.ErrorE(err)
-		os.Exit(1)
-	}
-	if err = as.Start(); err != nil {
 		co.ErrorE(fmt.Errorf("cannot start AuthorizationServer: %w", err))
 		os.Exit(1)
 	}
-	authServer = as
+	authServer = as.WithIssuer(testIssuer)
+	defer func() {
+		StopTestIssuerServer(as)
+	}()
 
-	code := m.Run()
-	_ = as.Shutdown()
-
-	os.Exit(code)
+	os.Exit(m.Run())
 }

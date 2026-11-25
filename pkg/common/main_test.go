@@ -6,8 +6,8 @@ import (
 )
 
 func TestMain(m *testing.M) {
-
 	HomeDir()
 
-	os.Exit(m.Run())
+	code := m.Run()
+	os.Exit(code)
 }

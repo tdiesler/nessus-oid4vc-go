@@ -3,6 +3,8 @@ package holder
 import (
 	"fmt"
 	"time"
+
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
 // Holder =================================================================================================================
@@ -25,23 +27,16 @@ func NewWallet(iss, username string) (*Wallet, error) {
 		return nil, err
 	}
 
-	if iss == "" {
-		iss = state.DefaultIssuer
-	}
-	if iss == "" {
-		return nil, fmt.Errorf("no issuer specified and no default issuer configured")
-	}
-
-	issuer, ok := state.Issuers[iss]
-	if !ok {
-		return nil, fmt.Errorf("no issuer %q configured", iss)
+	issuer, err := resolveIssuer(state, iss)
+	if err != nil {
+		return nil, err
 	}
 
 	if username == "" {
 		username = issuer.DefaultUser
 	}
 	if username == "" {
-		return nil, fmt.Errorf("no user specified and issuer %q has no default user", iss)
+		return nil, fmt.Errorf("no user specified and issuer %q has no default user", issuer.Alias)
 	}
 
 	return &Wallet{state: state, issuer: issuer, username: username}, nil
@@ -241,3 +236,96 @@ func (w *Wallet) refreshSession(con *Connection) error {
 }
 
 // Functions ---------------------------------------------------------------------------------------------------------
+
+// CredentialIssuerMetadata fetches issuerAlias's OID4VCI credential issuer
+// metadata document, falling back to the holder's default issuer. Unlike
+// Wallet's other operations, this is read-only and user-independent, so it
+// doesn't go through NewWallet.
+func CredentialIssuerMetadata(issuerAlias string) (*co.CredentialIssuerMetadata, error) {
+	state, err := LoadWalletState()
+	if err != nil {
+		return nil, err
+	}
+
+	issuer, err := resolveIssuer(state, issuerAlias)
+	if err != nil {
+		return nil, err
+	}
+
+	return discoverCredentialIssuerMetadata(issuer.IssuerURL)
+}
+
+// CurrentState resolves issuerAlias to a configured issuer, falling back to
+// the holder's default issuer, and returns its alias and default user.
+func CurrentState(issuerAlias string) (alias, username string, err error) {
+	state, err := LoadWalletState()
+	if err != nil {
+		return "", "", err
+	}
+
+	issuer, err := resolveIssuer(state, issuerAlias)
+	if err != nil {
+		return "", "", err
+	}
+
+	return issuer.Alias, issuer.DefaultUser, nil
+}
+
+// OpenIDConfiguration fetches issuerAlias's OpenID Connect discovery
+// document, falling back to the holder's default issuer. Unlike Wallet's
+// other operations, this is read-only and user-independent, so it doesn't
+// go through NewWallet.
+func OpenIDConfiguration(issuerAlias string) (*co.AuthorizationServerMetadata, error) {
+	state, err := LoadWalletState()
+	if err != nil {
+		return nil, err
+	}
+
+	issuer, err := resolveIssuer(state, issuerAlias)
+	if err != nil {
+		return nil, err
+	}
+
+	return discoverMetadata(issuer.IssuerURL)
+}
+
+// resolveIssuer looks up alias in state's configured issuers, falling back
+// to state's default issuer when alias is empty.
+func resolveIssuer(state *WalletState, alias string) (*Issuer, error) {
+	if alias == "" {
+		alias = state.DefaultIssuer
+	}
+	if alias == "" {
+		return nil, fmt.Errorf("no issuer specified and no default issuer configured")
+	}
+	issuer, ok := state.Issuers[alias]
+	if !ok {
+		return nil, fmt.Errorf("no issuer %q configured", alias)
+	}
+	return issuer, nil
+}
+
+// SwitchIssuer makes alias the holder's new default issuer, persisting the
+// change to both alias's file and, if it differs, the previous default
+// issuer's file — each file's own Default flag is what LoadWalletState
+// derives WalletState.DefaultIssuer from.
+func SwitchIssuer(alias string) error {
+	state, err := LoadWalletState()
+	if err != nil {
+		return err
+	}
+
+	if _, ok := state.Issuers[alias]; !ok {
+		return fmt.Errorf("no issuer %q configured", alias)
+	}
+
+	previous := state.DefaultIssuer
+	state.DefaultIssuer = alias
+
+	if previous != "" && previous != alias {
+		if err := state.SaveWalletState(previous); err != nil {
+			return err
+		}
+	}
+	return state.SaveWalletState(alias)
+}

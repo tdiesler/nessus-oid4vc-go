@@ -28,5 +28,5 @@ func TestDiscoverAuthorizationServerMetadata(t *testing.T) {
 	require.Equal(t, issuerEndpoint+"/token", metadata.TokenEndpoint)
 	require.Equal(t, issuerEndpoint+"/userinfo", metadata.UserinfoEndpoint)
 	require.Equal(t, issuerEndpoint+"/.well-known/keys", metadata.JwksUri)
-	require.Contains(t, metadata.ScopesSupported, "profile")
+	require.Contains(t, metadata.ScopesSupported, "openid")
 }

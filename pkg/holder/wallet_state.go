@@ -80,18 +80,18 @@ func LoadWalletStateFromDir(dir string) (*WalletState, error) {
 
 // SaveWalletState persists alias's Issuer from w into dir's dedicated
 // holder.<alias>.json file, leaving every other issuer's file untouched.
-func (w *WalletState) SaveWalletState(alias string) error {
-	return w.SaveWalletStateToDir(alias, filepath.Join(co.HomeDir(), ".config"))
+func (ws *WalletState) SaveWalletState(alias string) error {
+	return ws.SaveWalletStateToDir(alias, filepath.Join(co.HomeDir(), ".config"))
 }
 
 // SaveWalletStateToDir persists alias's Issuer from w into dir's dedicated
 // holder.<alias>.json file, leaving every other issuer's file untouched.
-func (w *WalletState) SaveWalletStateToDir(alias string, dir string) error {
-	issuer, ok := w.Issuers[alias]
+func (ws *WalletState) SaveWalletStateToDir(alias string, dir string) error {
+	issuer, ok := ws.Issuers[alias]
 	if !ok {
 		return fmt.Errorf("no issuer %q in holder state", alias)
 	}
-	issuer.Default = alias == w.DefaultIssuer
+	issuer.Default = alias == ws.DefaultIssuer
 
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create %s: %w", dir, err)

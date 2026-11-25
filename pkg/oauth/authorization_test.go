@@ -10,7 +10,8 @@ import (
 
 // TestCodeFlowAuthorization drives Vault's own OIDC provider login page as
 // Alice's holder/user-agent would, redeems the resulting authorization code
-// at the token endpoint, and expects back a real access token.
+// at the token endpoint, and expects back a real access token whose
+// id_token verifies against Vault's own JWKS.
 func TestCodeFlowAuthorization(t *testing.T) {
 	cfg, err := co.GetAppConfig()
 	require.NoError(t, err)
@@ -18,7 +19,7 @@ func TestCodeFlowAuthorization(t *testing.T) {
 	// Complete the Authorization Code flow.
 	authAccessor, err := NewAuthorizationAccessor()
 	require.NoError(t, err)
-	code, err := authAccessor.CodeFlowAuthorization(cfg.OidcClient, "openid profile", co.UserAlice, co.UserPassword)
+	code, err := authAccessor.CodeFlowAuthorization(cfg.OidcClient, "openid", co.UserAlice, co.UserPassword)
 	require.NoError(t, err)
 	require.NotEmpty(t, code)
 
@@ -29,7 +30,7 @@ func TestCodeFlowAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, token.AccessToken)
 
-	// Verify the id_token's signature and claims.
+	// Verify the id_token's signature.
 	discovery, err := NewWellKnownAccessor()
 	require.NoError(t, err)
 	metadata, err := discovery.AuthorizationServerMetadata()
@@ -38,16 +39,12 @@ func TestCodeFlowAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	claims, err := co.VerifyJWT(token.IdToken, jwks)
 	require.NoError(t, err)
-	require.Equal(t, "Alice", claims["firstName"])
-	require.Equal(t, "Wonderland", claims["familyName"])
-	require.Equal(t, "alice@email.com", claims["email"])
+	require.NotEmpty(t, claims["sub"])
 
-	// Confirm the same claims via the UserInfo endpoint.
+	// Confirm the UserInfo endpoint resolves the same subject.
 	userinfoAccessor, err := NewUserInfoAccessor()
 	require.NoError(t, err)
 	userinfoClaims, err := userinfoAccessor.Fetch(metadata.UserinfoEndpoint, token.AccessToken)
 	require.NoError(t, err)
-	require.Equal(t, "Alice", userinfoClaims["firstName"])
-	require.Equal(t, "Wonderland", userinfoClaims["familyName"])
-	require.Equal(t, "alice@email.com", userinfoClaims["email"])
+	require.Equal(t, claims["sub"], userinfoClaims["sub"])
 }

@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"github.com/spf13/cobra"
@@ -8,9 +8,8 @@ import (
 
 // LogoutOpts ==============================================================================================================
 
-// LogoutOpts holds logout's flag values — exported so tests can construct
-// one directly and call Run, instead of driving the cobra command through
-// its flags. It embeds RootOpts for Issuer, shared with every subcommand.
+// LogoutOpts holds logout's flag values. It embeds RootOpts for Issuer,
+// shared with every subcommand.
 type LogoutOpts struct {
 	RootOpts
 	User string

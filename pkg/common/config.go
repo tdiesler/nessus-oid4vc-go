@@ -18,6 +18,9 @@ type AppConfig struct {
 	RedirectUri  string
 
 	Oid4vciAddr string
+
+	CredentialConfigurations []CredentialConfig
+	Scopes                   []ScopeConfig
 }
 
 func NewAppConfig() (*AppConfig, error) {
@@ -55,6 +58,18 @@ func NewAppConfig() (*AppConfig, error) {
 	if cfg.VaultAddr == "" {
 		return nil, fmt.Errorf("Vault.Addr is required (set it in %s or VAULT_ADDR)", v.ConfigFileUsed())
 	}
+
+	// Credential configurations and their granting scopes.
+	if err := v.UnmarshalKey("CredentialConfigurations", &cfg.CredentialConfigurations); err != nil {
+		return nil, fmt.Errorf("common: decode CredentialConfigurations: %w", err)
+	}
+	if err := v.UnmarshalKey("Scopes", &cfg.Scopes); err != nil {
+		return nil, fmt.Errorf("common: decode Scopes: %w", err)
+	}
+	if err := cfg.validateCredentialConfigurations(); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
 }
 
@@ -72,6 +87,52 @@ func GetAppConfig() (*AppConfig, error) {
 // Private -------------------------------------------------------------------------------------------------------------
 
 var appConfig *AppConfig
+
+// validateCredentialConfigurations checks cfg's CredentialConfigurations
+// and Scopes for internal consistency: unique, non-empty credential
+// configuration ids and scope names, and every scope's
+// CredentialConfigurationIds resolving to a declared credential
+// configuration.
+func (cfg *AppConfig) validateCredentialConfigurations() error {
+
+	ids := make(map[string]bool, len(cfg.CredentialConfigurations))
+	for _, cc := range cfg.CredentialConfigurations {
+		if cc.Id == "" {
+			return fmt.Errorf("common: CredentialConfigurations: id is required")
+		}
+		if ids[cc.Id] {
+			return fmt.Errorf("common: CredentialConfigurations: duplicate id %q", cc.Id)
+		}
+		if cc.Format == "" {
+			return fmt.Errorf("common: CredentialConfigurations[%s]: format is required", cc.Id)
+		}
+		if cc.Vct == "" {
+			return fmt.Errorf("common: CredentialConfigurations[%s]: vct is required", cc.Id)
+		}
+		ids[cc.Id] = true
+	}
+
+	names := make(map[string]bool, len(cfg.Scopes))
+	for _, scope := range cfg.Scopes {
+		if scope.Name == "" {
+			return fmt.Errorf("common: Scopes: name is required")
+		}
+		if names[scope.Name] {
+			return fmt.Errorf("common: Scopes: duplicate name %q", scope.Name)
+		}
+		if len(scope.CredentialConfigurationIds) == 0 {
+			return fmt.Errorf("common: Scopes[%s]: at least one credential_configuration_id is required", scope.Name)
+		}
+		for _, id := range scope.CredentialConfigurationIds {
+			if !ids[id] {
+				return fmt.Errorf("common: Scopes[%s]: undeclared credential_configuration_id %q", scope.Name, id)
+			}
+		}
+		names[scope.Name] = true
+	}
+
+	return nil
+}
 
 // configFile returns the config file path: common/oid4vc-config.yml under
 // NESSUS_OID4VC_HOME, falling back to the process' working directory when unset.

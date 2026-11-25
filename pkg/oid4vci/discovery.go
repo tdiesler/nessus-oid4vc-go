@@ -1,5 +1,7 @@
 package oid4vci
 
+import co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
+
 // Metadata =================================================================================================================
 
 // Metadata is this authorization server's own OAuth 2.0 / OpenID Connect
@@ -18,8 +20,16 @@ type Metadata struct {
 }
 
 // NewMetadata constructs the discovery document for an authorization server
-// whose base URL is issuer.
-func NewMetadata(issuer string) *Metadata {
+// whose base URL is issuer, with ScopesSupported built from cfg's
+// configured scopes (see pkg/common.ScopeConfig) — this server's own
+// scopes, not Vault's unrelated OIDC provider scopes (see pkg/oauth).
+func NewMetadata(issuer string, cfg *co.AppConfig) *Metadata {
+	scopesSupported := make([]string, 0, len(cfg.Scopes)+1)
+	scopesSupported = append(scopesSupported, "openid")
+	for _, scope := range cfg.Scopes {
+		scopesSupported = append(scopesSupported, scope.Name)
+	}
+
 	return &Metadata{
 		Issuer:                 issuer,
 		AuthorizationEndpoint:  issuer + "/authorize",
@@ -27,7 +37,7 @@ func NewMetadata(issuer string) *Metadata {
 		UserinfoEndpoint:       issuer + "/userinfo",
 		RevocationEndpoint:     issuer + "/revoke",
 		JwksUri:                issuer + "/jwks.json",
-		ScopesSupported:        []string{"openid", "profile"},
+		ScopesSupported:        scopesSupported,
 		ResponseTypesSupported: []string{"code"},
 		GrantTypesSupported:    []string{"authorization_code"},
 	}

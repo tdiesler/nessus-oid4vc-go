@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"github.com/spf13/cobra"
@@ -19,10 +19,8 @@ func NewKeyCmd() *cobra.Command {
 
 // KeyCreateOpts ===========================================================================================================
 
-// KeyCreateOpts holds key create's flag values — exported so tests can
-// construct one directly and call Run, instead of driving the cobra
-// command through its flags. It embeds RootOpts for Issuer, shared with
-// every subcommand.
+// KeyCreateOpts holds key create's flag values. It embeds RootOpts for
+// Issuer, shared with every subcommand.
 type KeyCreateOpts struct {
 	RootOpts
 	Name string

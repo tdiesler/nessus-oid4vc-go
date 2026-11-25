@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -20,9 +20,8 @@ func NewVcCmd() *cobra.Command {
 
 // VcGetOpts ===============================================================================================================
 
-// VcGetOpts holds vc get's flag values — exported so tests can construct
-// one directly and call Run, instead of driving the cobra command through
-// its flags. It embeds RootOpts for Issuer, shared with every subcommand.
+// VcGetOpts holds vc get's flag values. It embeds RootOpts for Issuer,
+// shared with every subcommand.
 type VcGetOpts struct {
 	RootOpts
 	CredentialIdentifier      string

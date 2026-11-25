@@ -9,7 +9,8 @@ import (
 
 func TestMain(m *testing.M) {
 
-	co.HomeDir()
+	co.InitLogging()
 
-	os.Exit(m.Run())
+	code := m.Run()
+	os.Exit(code)
 }

@@ -1,12 +1,9 @@
-package main
+package cmd
 
 import (
-	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/oid4vci"
 )
@@ -28,32 +25,35 @@ const (
 // this process — so an "alice" session a test logs into is the same shape
 // of holder state a manual `oid4vc login` run would produce. The one thing
 // a terminal session wouldn't otherwise have running is the oid4vci server
-// itself, so TestMain starts that.
+// itself, so TestMain starts that (via oid4vci.StartTestIssuerServer, the vault
+// flavor's own test server — unlike the keycloak flavor, which is assumed
+// already set up and reachable, see scripts/keycloak-setup) and points the
+// vault wallet issuer at it for the run, restoring wallet.vault.json to
+// its prior content afterward.
 func TestMain(m *testing.M) {
-	co.HomeDir()
+
+	co.InitLogging()
 
 	_ = os.Setenv("NESSUS_OID4VC_OID4VCI_ADDR", testOid4vciAddr)
 	_ = os.Setenv("NESSUS_OID4VC_VAULT_REDIRECTURI", testRedirectUri)
 
-	as, err := oid4vci.NewAuthorizationServerFromConfig()
+	as, err := oid4vci.StartTestIssuerServer("http://" + testOid4vciAddr)
 	if err != nil {
 		co.ErrorE(err)
 		os.Exit(1)
 	}
-	if err = as.Start(); err != nil {
+
+	snapshot, err := oid4vci.SetupTestIssuerVault(as.BaseURL)
+	if err != nil {
 		co.ErrorE(err)
 		os.Exit(1)
 	}
 
-	defer func() { _ = as.Shutdown() }()
+	defer func() {
+		_ = snapshot.Restore()
+		oid4vci.StopTestIssuerServer(as)
+	}()
 
-	os.Exit(m.Run())
-}
-
-func takeWalletSnapshot(t *testing.T, flavor string) *co.FileSnapshot {
-	walletDir := filepath.Join(co.HomeDir(), ".config")
-	fileName := fmt.Sprintf("holder.%s.json", flavor)
-	snapshot, err := co.NewFileSnapshot(filepath.Join(walletDir, fileName))
-	require.NoError(t, err)
-	return snapshot
+	code := m.Run()
+	os.Exit(code)
 }

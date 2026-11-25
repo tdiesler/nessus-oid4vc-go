@@ -5,4 +5,16 @@ Vault:
   RedirectURI: http://localhost:8400/callback
 
 Oid4vci:
-  Addr: 127.0.0.1:9000
+  Addr: http://127.0.0.1:9000
+
+CredentialConfigurations:
+  - Id: natural_person_sd
+    Format: dc+sd-jwt
+    Vct: NaturalPerson
+  - Id: natural_person_jwt
+    Format: jwt_vc_json
+    Vct: NaturalPerson
+
+Scopes:
+  - Name: natural_person
+    CredentialConfigurationIds: [natural_person_sd, natural_person_jwt]

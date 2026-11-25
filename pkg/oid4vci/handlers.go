@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
 )
 
 // NewMux builds this authorization server's HTTP route table: discovery,
@@ -17,6 +19,7 @@ import (
 func NewMux(as *AuthorizationServer) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", handleDiscovery(as))
+	mux.HandleFunc("GET /.well-known/openid-credential-issuer", handleCredentialIssuerMetadata(as))
 	mux.HandleFunc("GET /authorize", handleAuthorizeForm(as))
 	mux.HandleFunc("POST /authorize", handleAuthorizeLogin(as))
 	mux.HandleFunc("POST /token", handleToken(as))
@@ -99,8 +102,15 @@ func handleAuthorizeLogin(as *AuthorizationServer) http.HandlerFunc {
 	}
 }
 
+func handleCredentialIssuerMetadata(as *AuthorizationServer) http.HandlerFunc {
+	metadata := co.NewCredentialIssuerMetadata(as.Issuer, as.cfg)
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, metadata)
+	}
+}
+
 func handleDiscovery(as *AuthorizationServer) http.HandlerFunc {
-	metadata := NewMetadata(as.Issuer)
+	metadata := NewMetadata(as.Issuer, as.cfg)
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, metadata)
 	}

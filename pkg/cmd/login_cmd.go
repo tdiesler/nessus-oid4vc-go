@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -12,9 +12,8 @@ import (
 
 // LoginOpts ===============================================================================================================
 
-// LoginOpts holds login's flag values — exported so tests can construct one
-// directly and call Run, instead of driving the cobra command through its
-// flags. It embeds RootOpts for Issuer, shared with every subcommand.
+// LoginOpts holds login's flag values. It embeds RootOpts for Issuer,
+// shared with every subcommand.
 type LoginOpts struct {
 	RootOpts
 	Client   string

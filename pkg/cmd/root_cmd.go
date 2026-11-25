@@ -1,10 +1,12 @@
-package main
+package cmd
 
 import (
 	"github.com/spf13/cobra"
-	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
-	"github.com/tdiesler/nessus-oid4vc-go/pkg/holder"
 )
+
+// rootShort is oid4vc's one-line description, shared between NewRootCmd's
+// own Short text and the REPL's startup banner (see ReplOpts.Run).
+const rootShort = "OID4VC Wallet CLI and Issuer using Hashicorp Vault"
 
 // RootOpts ================================================================================================================
 
@@ -15,20 +17,25 @@ type RootOpts struct {
 	Issuer string
 }
 
-// NewRootCmd builds the oid4vc command tree. With no subcommand it enters
-// the interactive REPL (see NewReplCmd).
+// NewRootCmd builds the oid4vc command tree: wallet operations against an
+// issuer, plus run-server to run the oid4vci AuthorizationServer itself.
+// With no subcommand it enters the interactive REPL (see NewReplCmd).
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "oid4vc",
-		Short: "OID4VC Wallet CLI",
+		Short: rootShort,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return NewReplOpts().Run()
 		},
+		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	}
 	cmd.AddCommand(
 		NewLoginCmd(),
 		NewLogoutCmd(),
 		NewKeyCmd(),
+		NewRunServerCmd(),
+		NewShowCmd(),
+		NewSwitchCmd(),
 		NewVcCmd(),
 		NewReplCmd())
 	return cmd
@@ -42,35 +49,4 @@ func NewRootCmd() *cobra.Command {
 // parses a command's flags before RunE runs.
 func bindRootOpts(cmd *cobra.Command, root *RootOpts) {
 	cmd.Flags().StringVar(&root.Issuer, "issuer", "", "Issuer alias to operate against (default: the holder's default issuer)")
-}
-
-// ensureDefaultVaultIssuer adds a vault-flavored Issuer to state, derived
-// from this project's own AppConfig, unless one is already present.
-func ensureDefaultVaultIssuer() error {
-
-	state, err := holder.LoadWalletState()
-	if err != nil {
-		return err
-	}
-
-	if _, ok := state.Issuers[holder.IssuerVault]; ok {
-		return nil
-	}
-
-	cfg, err := co.GetAppConfig()
-	if err != nil {
-		return err
-	}
-
-	issuer := holder.NewIssuer(holder.IssuerVault, "http://"+cfg.Oid4vciAddr)
-	issuer.RedirectUri = cfg.RedirectUri
-	issuer.DefaultClient = cfg.OidcClient
-	issuer.DefaultUser = co.UserAlice
-	issuer.Users[co.UserAlice] = holder.NewConnection(cfg.OidcClient)
-
-	state.Issuers[holder.IssuerVault] = issuer
-	if state.DefaultIssuer == "" {
-		state.DefaultIssuer = holder.IssuerVault
-	}
-	return nil
 }

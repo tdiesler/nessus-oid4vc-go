@@ -36,7 +36,7 @@ func NewOAuthClient() (*OAuthClient, error) {
 		return nil, err
 	}
 
-	baseUrl := "http://" + cfg.Oid4vciAddr
+	baseUrl := cfg.Oid4vciAddr
 	redirectUri := cfg.RedirectUri
 
 	client := OAuthClient{

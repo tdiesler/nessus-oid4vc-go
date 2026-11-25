@@ -12,6 +12,17 @@ import (
 
 // Functions ---------------------------------------------------------------------------------------------------------
 
+// discoverCredentialIssuerMetadata fetches issuerURL's OID4VCI credential
+// issuer metadata document.
+func discoverCredentialIssuerMetadata(issuerURL string) (*co.CredentialIssuerMetadata, error) {
+	req := co.NewHttpGetRequest(issuerURL + "/.well-known/openid-credential-issuer")
+	metadata, err := req.Fetch[co.CredentialIssuerMetadata](http.DefaultClient)
+	if err != nil {
+		return nil, fmt.Errorf("discover %s: %w", issuerURL, err)
+	}
+	return &metadata, nil
+}
+
 // discoverMetadata fetches issuerURL's OpenID Connect discovery document.
 func discoverMetadata(issuerURL string) (*co.AuthorizationServerMetadata, error) {
 	req := co.NewHttpGetRequest(issuerURL + "/.well-known/openid-configuration")

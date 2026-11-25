@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -27,9 +28,11 @@ const (
 // signs id_tokens itself via signer. See issue #17 for why — Vault's own
 // OIDC provider issues a capability-less token usable only at its own
 // /userinfo.
+// [TODO >>>] This is also an OID4VCI Server
 type AuthorizationServer struct {
 	Issuer   string
 	BaseURL  string
+	cfg      *co.AppConfig
 	clients  map[string]*Client
 	sessions *SessionStore
 	signer   *TransitSigner
@@ -40,7 +43,7 @@ type AuthorizationServer struct {
 // NewAuthorizationServer constructs an AuthorizationServer for issuer (this
 // service's externally-visible identity — used as the id_token's "iss"
 // claim and to build the discovery document's endpoint URLs), bound to addr.
-func NewAuthorizationServer(issuer, addr string) (*AuthorizationServer, error) {
+func NewAuthorizationServer(baseUrl string) (*AuthorizationServer, error) {
 
 	cfg, err := co.GetAppConfig()
 	if err != nil {
@@ -64,14 +67,19 @@ func NewAuthorizationServer(issuer, addr string) (*AuthorizationServer, error) {
 	}
 
 	// Bind the address Start will serve on.
-	listener, err := net.Listen("tcp", addr)
+	aux, err := url.Parse(baseUrl)
+	if err != nil {
+		return nil, err
+	}
+	listener, err := net.Listen("tcp", aux.Host)
 	if err != nil {
 		return nil, err
 	}
 
 	return &AuthorizationServer{
-		Issuer:   issuer,
-		BaseURL:  "http://" + listener.Addr().String(),
+		Issuer:   baseUrl,
+		BaseURL:  baseUrl,
+		cfg:      cfg,
 		clients:  clients,
 		sessions: NewSessionStore(),
 		listener: listener,
@@ -87,7 +95,12 @@ func NewAuthorizationServerFromConfig() (*AuthorizationServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewAuthorizationServer("http://"+cfg.Oid4vciAddr, cfg.Oid4vciAddr)
+	return NewAuthorizationServer(cfg.Oid4vciAddr)
+}
+
+func (as *AuthorizationServer) WithIssuer(issuer string) *AuthorizationServer {
+	as.Issuer = issuer
+	return as
 }
 
 // Start begins serving on this server's bound listener in the background,
@@ -234,7 +247,7 @@ func (as *AuthorizationServer) WriteKeyValueClaims(accessToken, path, alias stri
 // Client ===============================================================================================================
 
 // Client is a public OAuth 2.0 client registered with this authorization
-// server (RFC 6749 §2.1) — the role a holder holder plays, which can't be
+// server (RFC 6749 §2.1) — the role a holder wallet plays, which can't be
 // expected to hold a secret. This is this service's own client registry,
 // distinct from Vault's identity/oidc/client: fronting Vault means client
 // registration becomes this service's concern too, not Vault's. Compare

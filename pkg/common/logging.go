@@ -28,25 +28,20 @@ const (
 // InitLogging sets the default logger to write >= LevelInfo records to the
 // console (stdout) and every record, regardless of level, to logfile
 // (rotated via lumberjack).
-func InitLogging(logfile string) Logger {
-	console := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level:       LevelInfo,
-		ReplaceAttr: replaceAttr,
-	})
-	file := slog.NewJSONHandler(&lumberjack.Logger{Filename: logfile}, &slog.HandlerOptions{
+func InitLogging() Logger {
+	logfile := LogsDir() + "/oid4vc-debug.log"
+	logger := lumberjack.Logger{Filename: logfile}
+	file := slog.NewJSONHandler(&logger, &slog.HandlerOptions{
 		Level:       LevelDebug,
 		ReplaceAttr: replaceAttr,
 	})
+	console := NewConsoleHandler(LevelInfo)
 	slog.SetDefault(slog.New(NewMultiHandler(console, file)))
 	return Default()
 }
 
 func LogsDir() string {
-	home := os.Getenv("NESSUS_OID4VC_HOME")
-	if home == "" {
-		home, _ = os.Getwd()
-	}
-	logsDir := home + "/workspace/logs"
+	logsDir := HomeDir() + "/workspace/logs"
 	if err := os.MkdirAll(logsDir, 0744); err != nil {
 		panic(err)
 	}
@@ -178,6 +173,36 @@ func (bl *BaseLogger) LogF(level slog.Level, format string, args ...any) {
 
 func (bl *BaseLogger) LogE(level slog.Level, err error) {
 	bl.slgr.Log(context.Background(), level, err.Error(), slog.Any(TraceKey, GetStackFrames(err)))
+}
+
+// ConsoleHandler writes only a log record's message to stdout, one line per
+// record — no time, level, or attrs, which belong in the file handler's
+// structured JSON output instead.
+type ConsoleHandler struct {
+	level slog.Leveler
+}
+
+// NewConsoleHandler constructs a ConsoleHandler that handles records at or
+// above level.
+func NewConsoleHandler(level slog.Leveler) *ConsoleHandler {
+	return &ConsoleHandler{level: level}
+}
+
+func (h *ConsoleHandler) Enabled(_ context.Context, level slog.Level) bool {
+	return level >= h.level.Level()
+}
+
+func (h *ConsoleHandler) Handle(_ context.Context, r slog.Record) error {
+	_, err := fmt.Fprintln(os.Stdout, r.Message)
+	return err
+}
+
+func (h *ConsoleHandler) WithAttrs(_ []slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *ConsoleHandler) WithGroup(_ string) slog.Handler {
+	return h
 }
 
 // MultiHandler fans a record out to every handler that has it enabled, so

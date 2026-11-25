@@ -139,8 +139,18 @@ current as new conventions get established.
   on `scripts/vault-setup`'s full reset. Keycloak has no equivalent
   per-test provisioning from Go: tests log in as the fixed holder user
   (co.UserAlice/co.UserPassword) `scripts/keycloak-setup` already created,
-  reading that realm's wallet.keycloak.json (see pkg/wallet) rather than
+  reading that realm's wallet.keycloak.json (see pkg/holder) rather than
   creating their own realm/client/user.
+- The vault flavor's oid4vci `AuthorizationServer` is test-owned: a
+  package's `TestMain` starts its own instance (`pkg/oid4vci`'s
+  `StartTestServer`/`StopTestServer`, see `pkg/oid4vci/test_utils.go`)
+  rather than assuming one is already running, since this is the component
+  actively under development. The keycloak flavor has no equivalent —
+  tests assume a reachable realm from `scripts/keycloak-setup`, matching
+  the per-test provisioning note above. `pkg/cmd`'s `TestMain`
+  additionally points the holder's vault issuer at its own test server for
+  the run, snapshotting and restoring `wallet.vault.json` so real on-disk
+  holder state is unaffected.
 - Plain, fast, in-process unit tests with no external dependency (e.g. the
   pre-authorized-code store's expiry/single-use logic) stay as such — not
   everything needs Vault or Keycloak.

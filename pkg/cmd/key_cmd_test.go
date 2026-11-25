@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/holder"
+	"github.com/tdiesler/nessus-oid4vc-go/pkg/oid4vci"
 )
 
 // TestKeyCreate drives key create against the vault issuer. Key creation
@@ -20,7 +21,7 @@ import (
 func TestKeyCreate(t *testing.T) {
 	iss := holder.IssuerVault
 
-	snapshot := takeWalletSnapshot(t, iss)
+	snapshot := oid4vci.TakeWalletSnapshot(t, iss)
 	defer func() { _ = snapshot.Restore() }()
 
 	w, err := holder.NewWallet(iss, "")

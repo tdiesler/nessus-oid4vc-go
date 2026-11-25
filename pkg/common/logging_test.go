@@ -9,8 +9,7 @@ import (
 
 func TestBasicLog(t *testing.T) {
 
-	logfile := LogsDir() + "/test.log"
-	InitLogging(logfile)
+	InitLogging()
 
 	DebugF("Debug %s", "Kermit")
 	InfoF("Info %s", "Kermit")
@@ -21,10 +20,7 @@ func TestBasicLog(t *testing.T) {
 }
 
 func TestSymbolLog(t *testing.T) {
-
-	logfile := LogsDir() + "/test.log"
-	log := InitLogging(logfile)
-
+	log := InitLogging()
 	log = log.With(SymbolKey, "nexo/btc")
 	log.InfoF("Info %s", "Kermit")
 }
@@ -41,8 +37,7 @@ func TestErrorPrint(t *testing.T) {
 
 func TestErrorLog(t *testing.T) {
 
-	logfile := LogsDir() + "/test.log"
-	InitLogging(logfile)
+	InitLogging()
 
 	InfoF("---")
 	ErrorF("message error%02d", 1)
@@ -57,20 +52,4 @@ func TestErrorLog(t *testing.T) {
 	innerErr := errors.Errorf("Inner error")
 	outerErr := errors.Wrap(innerErr, "Outer error")
 	ErrorE(outerErr)
-}
-
-func TestLevelFatal(t *testing.T) {
-
-	// Run manually
-	t.SkipNow()
-
-	logfile := LogsDir() + "/test.log"
-	InitLogging(logfile)
-
-	//FatalF("Fatal %s", "Kermit")
-
-	err := errors.Errorf("FatalError %s", "Kermit")
-	//FatalE(err)
-
-	FatalE(errors.Wrapf(err, "Wrapped error"))
 }

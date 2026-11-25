@@ -47,9 +47,6 @@ vault delete identity/oidc/provider/oid4vc >/dev/null 2>&1 || true
 echo "Resetting OIDC client 'oid4vc-client' ..."
 vault delete identity/oidc/client/oid4vc-client >/dev/null 2>&1 || true
 
-echo "Resetting OIDC scope 'profile' ..."
-vault delete identity/oidc/scope/profile >/dev/null 2>&1 || true
-
 echo "Resetting OIDC key 'oid4vci' ..."
 vault delete identity/oidc/key/oid4vci >/dev/null 2>&1 || true
 
@@ -141,11 +138,6 @@ vault write auth/token/roles/issuer-mint \
 echo "Creating OIDC signing key 'oid4vci' ..."
 vault write identity/oidc/key/oid4vci allowed_client_ids="*" algorithm=RS256 >/dev/null
 
-echo "Writing OIDC scope 'profile' ..."
-vault write identity/oidc/scope/profile \
-  description="Subject profile claims" \
-  template='{"firstName": {{identity.entity.metadata.firstName}}, "familyName": {{identity.entity.metadata.familyName}}, "email": {{identity.entity.metadata.email}}}' >/dev/null
-
 echo "Registering OIDC client 'oid4vc-client' ..."
 vault write identity/oidc/client/oid4vc-client \
   redirect_uris="http://localhost:8400/callback" \
@@ -162,7 +154,6 @@ OIDC_CLIENT_SECRET="$(echo "${OIDC_CLIENT}" | jq -r '.data.client_secret')"
 echo "Creating OIDC provider 'oid4vc' ..."
 vault write identity/oidc/provider/oid4vc \
   allowed_client_ids="*" \
-  scopes_supported="profile" \
   issuer="${VAULT_ADDR}" >/dev/null
 
 # Functions ------------------------------------------------------------------------------------------------------------
@@ -274,7 +265,7 @@ ALICE_TOKEN="$(vault login -method=userpass -token-only username=alice password=
 
 echo "Alice starts the OAuth Authorization Code flow at Vault's OIDC provider ..."
 AUTHORIZE_RESPONSE="$(curl -s -H "X-Vault-Token: ${ALICE_TOKEN}" \
-  "${VAULT_ADDR}/v1/identity/oidc/provider/oid4vc/authorize?client_id=${OIDC_CLIENT_ID}&response_type=code&scope=openid%20profile&redirect_uri=http://localhost:8400/callback")"
+  "${VAULT_ADDR}/v1/identity/oidc/provider/oid4vc/authorize?client_id=${OIDC_CLIENT_ID}&response_type=code&scope=openid&redirect_uri=http://localhost:8400/callback")"
 
 AUTH_CODE="$(echo "${AUTHORIZE_RESPONSE}" | jq -r '.code // empty')"
 if [ -z "${AUTH_CODE}" ]; then
@@ -294,12 +285,12 @@ TOKEN_RESPONSE="$(curl -s -u "${OIDC_CLIENT_ID}:${OIDC_CLIENT_SECRET}" \
 ID_TOKEN="$(echo "${TOKEN_RESPONSE}" | jq -r '.id_token')"
 OAUTH_ACCESS_TOKEN="$(echo "${TOKEN_RESPONSE}" | jq -r '.access_token')"
 
-echo "Alice's ID token claims (her profile, delivered via OAuth, not a direct KV read):"
-decode_jwt_payload "${ID_TOKEN}" | jq '{sub, firstName, familyName, email}'
+echo "Alice's ID token claims, delivered via OAuth:"
+decode_jwt_payload "${ID_TOKEN}" | jq '{sub}'
 
 echo "Same claims again via the OIDC userinfo endpoint, using the OAuth access token:"
 curl -s -H "Authorization: Bearer ${OAUTH_ACCESS_TOKEN}" \
-  "${VAULT_ADDR}/v1/identity/oidc/provider/oid4vc/userinfo" | jq '{sub, firstName, familyName, email}'
+  "${VAULT_ADDR}/v1/identity/oidc/provider/oid4vc/userinfo" | jq '{sub}'
 
 # Demonstrate: Max, who holds no access to Alice's claims himself, mints a
 # pre-authorized code for her via the issuer-mint role; whoever redeems it
