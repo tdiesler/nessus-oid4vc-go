@@ -21,16 +21,18 @@ type Session struct {
 	VaultToken  *vault.AccessToken
 	ClientId    string
 	RedirectUri string
+	Scope       string
 	ExpiresAt   time.Time
 }
 
 // NewSession constructs a Session that expires after ttl.
-func NewSession(subject string, vaultToken *vault.AccessToken, clientId, redirectUri string, ttl time.Duration) *Session {
+func NewSession(subject string, vaultToken *vault.AccessToken, clientId, redirectUri, scope string, ttl time.Duration) *Session {
 	return &Session{
 		Subject:     subject,
 		VaultToken:  vaultToken,
 		ClientId:    clientId,
 		RedirectUri: redirectUri,
+		Scope:       scope,
 		ExpiresAt:   time.Now().Add(ttl),
 	}
 }

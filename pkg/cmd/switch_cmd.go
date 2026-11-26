@@ -6,24 +6,42 @@ import (
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/holder"
 )
 
-// SwitchOpts ================================================================================================================
-
-// SwitchOpts holds switch's flag values: the issuer alias to make the
-// holder's new default.
-type SwitchOpts struct {
-	Issuer string
+// NewSwitchCmd builds the switch command, grouping holder state switches.
+// With no subcommand it displays help.
+func NewSwitchCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "switch",
+		Short: "Switch the holder's active issuer",
+	}
+	cmd.AddCommand(NewSwitchIssuerCmd())
+	return cmd
 }
 
-// NewSwitchOpts constructs a SwitchOpts.
-func NewSwitchOpts() *SwitchOpts {
-	return &SwitchOpts{}
+// SwitchIssuerOpts ===========================================================================================================
+
+// SwitchIssuerOpts holds switch issuer's flag values — currently none: with
+// exactly two issuers configured, it switches to whichever one isn't
+// currently the default. Naming a specific issuer is deferred until a
+// third issuer of the same type (e.g. a second Vault deployment) exists
+// and "the other one" stops being unambiguous.
+type SwitchIssuerOpts struct {
 }
 
-// Run makes o.Issuer the holder's new default issuer.
-func (o *SwitchOpts) Run() error {
-	if err := holder.SwitchIssuer(o.Issuer); err != nil {
+// NewSwitchIssuerOpts constructs a SwitchIssuerOpts.
+func NewSwitchIssuerOpts() *SwitchIssuerOpts {
+	return &SwitchIssuerOpts{}
+}
+
+// Run makes the holder's one other configured issuer the new default.
+func (o *SwitchIssuerOpts) Run() error {
+	alias, err := holder.OtherIssuer()
+	if err != nil {
 		return err
 	}
+	if err := holder.SwitchIssuer(alias); err != nil {
+		return err
+	}
+
 	state, err := holder.LoadWalletState()
 	if err != nil {
 		return err
@@ -33,15 +51,14 @@ func (o *SwitchOpts) Run() error {
 	return nil
 }
 
-// NewSwitchCmd builds the switch command.
-func NewSwitchCmd() *cobra.Command {
-	opts := NewSwitchOpts()
+// NewSwitchIssuerCmd builds the switch issuer command.
+func NewSwitchIssuerCmd() *cobra.Command {
+	opts := NewSwitchIssuerOpts()
 	cmd := &cobra.Command{
-		Use:   "switch <issuer>",
-		Short: "Switch the holder's default issuer",
-		Args:  cobra.ExactArgs(1),
+		Use:   "issuer",
+		Short: "Switch the holder's default issuer to the other configured issuer",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts.Issuer = args[0]
 			return opts.Run()
 		},
 	}

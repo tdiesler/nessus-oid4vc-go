@@ -41,6 +41,7 @@ var loginFormTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE htm
 <form method="POST" action="/authorize">
 <input type="hidden" name="client_id" value="{{.ClientId}}">
 <input type="hidden" name="redirect_uri" value="{{.RedirectUri}}">
+<input type="hidden" name="scope" value="{{.Scope}}">
 <input type="hidden" name="state" value="{{.State}}">
 <input name="username" placeholder="Username" autocomplete="username">
 <input name="password" type="password" placeholder="Password" autocomplete="current-password">
@@ -53,6 +54,7 @@ var loginFormTemplate = template.Must(template.New("login").Parse(`<!DOCTYPE htm
 type loginFormData struct {
 	ClientId    string
 	RedirectUri string
+	Scope       string
 	State       string
 }
 
@@ -67,7 +69,8 @@ func handleAuthorizeForm(as *AuthorizationServer) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = loginFormTemplate.Execute(w, loginFormData{ClientId: clientId, RedirectUri: redirectUri, State: q.Get("state")})
+		data := loginFormData{ClientId: clientId, RedirectUri: redirectUri, Scope: q.Get("scope"), State: q.Get("state")}
+		_ = loginFormTemplate.Execute(w, data)
 	}
 }
 
@@ -78,9 +81,9 @@ func handleAuthorizeLogin(as *AuthorizationServer) http.HandlerFunc {
 			return
 		}
 
-		clientId, redirectUri, state := r.FormValue("client_id"), r.FormValue("redirect_uri"), r.FormValue("state")
+		clientId, redirectUri, scope, state := r.FormValue("client_id"), r.FormValue("redirect_uri"), r.FormValue("scope"), r.FormValue("state")
 
-		code, err := as.CompleteLogin(clientId, redirectUri, r.FormValue("username"), r.FormValue("password"))
+		code, err := as.CompleteLogin(clientId, redirectUri, scope, r.FormValue("username"), r.FormValue("password"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return

@@ -157,9 +157,7 @@ func (w *Wallet) Login(clientId, scope string, browser bool, password string) er
 		w.issuer.Users[w.username] = conn
 	}
 	conn.WithToken(token)
-	if len(authDetails) > 0 {
-		conn.AuthorizationDetails = authDetails
-	}
+	conn.AuthorizationDetails = authDetails
 	w.issuer.DefaultUser = w.username
 
 	return w.Save()
@@ -229,9 +227,7 @@ func (w *Wallet) refreshSession(con *Connection) error {
 		return fmt.Errorf("refresh token: %w", err)
 	}
 	con.WithToken(refreshed)
-	if len(authDetails) > 0 {
-		con.AuthorizationDetails = authDetails
-	}
+	con.AuthorizationDetails = authDetails
 	return w.Save()
 }
 
@@ -287,6 +283,29 @@ func OpenIDConfiguration(issuerAlias string) (*co.AuthorizationServerMetadata, e
 	}
 
 	return discoverMetadata(issuer.IssuerURL)
+}
+
+// OtherIssuer resolves the holder's one other configured issuer — the one
+// that isn't currently the default — requiring exactly two issuers to be
+// configured, since with any other count there's no single unambiguous
+// "other" to switch to.
+func OtherIssuer() (string, error) {
+	state, err := LoadWalletState()
+	if err != nil {
+		return "", err
+	}
+	if state.DefaultIssuer == "" {
+		return "", fmt.Errorf("no default issuer configured")
+	}
+	if len(state.Issuers) != 2 {
+		return "", fmt.Errorf("switch issuer: requires exactly 2 configured issuers, found %d", len(state.Issuers))
+	}
+	for alias := range state.Issuers {
+		if alias != state.DefaultIssuer {
+			return alias, nil
+		}
+	}
+	return "", fmt.Errorf("no other issuer configured")
 }
 
 // resolveIssuer looks up alias in state's configured issuers, falling back

@@ -125,8 +125,8 @@ func (as *AuthorizationServer) Shutdown() error {
 
 // CompleteLogin authenticates username/password against Vault's userpass
 // auth method on the holder's behalf, and mints a single-use authorization
-// code bound to the resulting Vault token.
-func (as *AuthorizationServer) CompleteLogin(clientId, redirectUri, username, password string) (string, error) {
+// code bound to the resulting Vault token and scope.
+func (as *AuthorizationServer) CompleteLogin(clientId, redirectUri, scope, username, password string) (string, error) {
 	if _, err := as.assertClient(clientId, redirectUri); err != nil {
 		return "", err
 	}
@@ -136,14 +136,20 @@ func (as *AuthorizationServer) CompleteLogin(clientId, redirectUri, username, pa
 		return "", fmt.Errorf("login %q: %w", username, err)
 	}
 
-	session := NewSession(username, vaultToken, clientId, redirectUri, codeTTL)
+	session := NewSession(username, vaultToken, clientId, redirectUri, scope, codeTTL)
 	return as.sessions.IssueCode(session)
 }
 
 // ExchangeCode redeems code for an access token and a signed id_token,
 // binding the exchange to the same client and redirect_uri the code was
 // issued for (RFC 6749 §4.1.3). Clients registered here are public (RFC
-// 6749 §2.3), so this doesn't authenticate the caller beyond clientId.
+// 6749 §2.3), so this doesn't authenticate the caller beyond clientId. The
+// response's authorization_details (OID4VCI §6.2) are derived from the
+// scope the authorization code was issued for, not re-requested here — RFC
+// 9396 marks authorization_details OPTIONAL in the token response when the
+// credential was requested via scope, but we return it anyway so the
+// holder learns every credential_configuration_id its scope granted,
+// rather than just the one it already knows.
 func (as *AuthorizationServer) ExchangeCode(code, clientId, redirectUri string) (*TokenResponse, error) {
 	_, err := as.assertClient(clientId, redirectUri)
 	if err != nil {
@@ -158,7 +164,7 @@ func (as *AuthorizationServer) ExchangeCode(code, clientId, redirectUri string) 
 		return nil, fmt.Errorf("authorization code was not issued for this client/redirect_uri")
 	}
 
-	accessToken, err := as.sessions.IssueAccessToken(NewSession(session.Subject, session.VaultToken, clientId, redirectUri, tokenTTL))
+	accessToken, err := as.sessions.IssueAccessToken(NewSession(session.Subject, session.VaultToken, clientId, redirectUri, session.Scope, tokenTTL))
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +174,8 @@ func (as *AuthorizationServer) ExchangeCode(code, clientId, redirectUri string) 
 		return nil, err
 	}
 
-	return NewTokenResponse(accessToken, idToken, tokenTTL), nil
+	authorizationDetails := NewAuthorizationDetails(as.cfg.CredentialConfigurationIdsForScope(session.Scope))
+	return NewTokenResponse(accessToken, idToken, tokenTTL, authorizationDetails), nil
 }
 
 // Logout revokes accessToken's underlying Vault token and removes its
@@ -307,20 +314,54 @@ func (as *AuthorizationServer) signIdToken(subject, clientId string) (string, er
 
 // TokenResponse is an OAuth 2.0 / OIDC Access Token Response (RFC 6749
 // §4.1.4, OIDC Core 1.0 §3.1.3.3), returned by this server's token
-// endpoint.
+// endpoint, extended with OID4VCI's authorization_details (§6.2) naming
+// the credential(s) the holder is now entitled to request.
 type TokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	IdToken     string `json:"id_token"`
-	ExpiresIn   int    `json:"expires_in"`
+	AccessToken          string                `json:"access_token"`
+	TokenType            string                `json:"token_type"`
+	IdToken              string                `json:"id_token"`
+	ExpiresIn            int                   `json:"expires_in"`
+	AuthorizationDetails []AuthorizationDetail `json:"authorization_details,omitempty"`
 }
 
 // NewTokenResponse constructs a TokenResponse valid for ttl.
-func NewTokenResponse(accessToken, idToken string, ttl time.Duration) *TokenResponse {
+func NewTokenResponse(accessToken, idToken string, ttl time.Duration, authorizationDetails []AuthorizationDetail) *TokenResponse {
 	return &TokenResponse{
-		AccessToken: accessToken,
-		TokenType:   "Bearer",
-		IdToken:     idToken,
-		ExpiresIn:   int(ttl.Seconds()),
+		AccessToken:          accessToken,
+		TokenType:            "Bearer",
+		IdToken:              idToken,
+		ExpiresIn:            int(ttl.Seconds()),
+		AuthorizationDetails: authorizationDetails,
 	}
+}
+
+// AuthorizationDetail ========================================================================================================
+
+// AuthorizationDetail is one entry of a Token Response's
+// authorization_details array (RFC 9396, OID4VCI §6.2, type
+// "openid_credential"): a credential_configuration_id the holder's scope
+// granted, and the credential_identifiers it must use to request that
+// credential at the Credential Endpoint.
+type AuthorizationDetail struct {
+	Type                      string   `json:"type"`
+	CredentialConfigurationId string   `json:"credential_configuration_id"`
+	CredentialIdentifiers     []string `json:"credential_identifiers"`
+}
+
+// NewAuthorizationDetails builds one AuthorizationDetail per credential
+// configuration id, each with a single credential_identifier derived by
+// appending "_0000" to the configuration id — this service's one Vault
+// Identity entity per credential subject (see AGENTS.md) means there's
+// exactly one Credential Dataset per configuration per subject, so a fixed
+// suffix is enough to name it.
+func NewAuthorizationDetails(credentialConfigurationIds []string) []AuthorizationDetail {
+	details := make([]AuthorizationDetail, len(credentialConfigurationIds))
+	for i, id := range credentialConfigurationIds {
+		details[i] = AuthorizationDetail{
+			Type:                      "openid_credential",
+			CredentialConfigurationId: id,
+			CredentialIdentifiers:     []string{id + "_0000"},
+		}
+	}
+	return details
 }

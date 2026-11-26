@@ -141,7 +141,7 @@ func NewIssuer(alias, issuerURL string) *Issuer {
 // within an Issuer.
 type Connection struct {
 	ClientId             string                `json:"clientId"`
-	AuthorizationDetails []AuthorizationDetail `json:"authorizationDetails,omitempty"`
+	AuthorizationDetails []AuthorizationDetail `json:"authorization_details,omitempty"`
 	DefaultKey           string                `json:"defaultKey,omitempty"`
 	Keys                 []jose.JSONWebKey     `json:"keys,omitempty"`
 	Credentials          map[string]string     `json:"credentials,omitempty"`

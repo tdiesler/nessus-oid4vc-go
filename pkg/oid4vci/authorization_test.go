@@ -8,6 +8,28 @@ import (
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/vault"
 )
 
+// TestAuthorizationDetails requests the natural_person scope at login and
+// checks the token response's authorization_details names both credential
+// configurations that scope grants (config/oid4vc-config.yml), each with
+// its single credential_identifier.
+func TestAuthorizationDetails(t *testing.T) {
+
+	oauth, err := NewOAuthClient()
+	require.NoError(t, err)
+	oauth.WithScope("natural_person")
+
+	code, err := oauth.Authorize(co.UserAlice, co.UserPassword)
+	require.NoError(t, err)
+
+	token, err := oauth.ExchangeCode(code)
+	require.NoError(t, err)
+
+	require.ElementsMatch(t, []AuthorizationDetail{
+		{Type: "openid_credential", CredentialConfigurationId: "natural_person_sd", CredentialIdentifiers: []string{"natural_person_sd_0000"}},
+		{Type: "openid_credential", CredentialConfigurationId: "natural_person_jwt", CredentialIdentifiers: []string{"natural_person_jwt_0000"}},
+	}, token.AuthorizationDetails)
+}
+
 // TestOAuthAuthorization drives this server's own Authorization Code flow
 // as Alice's holder would — POST /authorize with her credentials, redeem
 // the resulting code at /token — and expects back an access_token plus an

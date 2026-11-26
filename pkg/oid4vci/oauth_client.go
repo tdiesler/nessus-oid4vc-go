@@ -24,6 +24,7 @@ type OAuthClient struct {
 	baseUrl     string
 	clientId    string
 	redirectUri string
+	scope       string
 	httpClient  *http.Client
 }
 
@@ -53,6 +54,12 @@ func NewOAuthClient() (*OAuthClient, error) {
 	return &client, nil
 }
 
+// WithScope sets the scope c.Authorize requests.
+func (c *OAuthClient) WithScope(scope string) *OAuthClient {
+	c.scope = scope
+	return c
+}
+
 // Authorize submits username/password to /authorize, the way a holder's
 // user-agent submitting a rendered login form would, and returns the
 // resulting authorization code from the redirect callback.
@@ -60,6 +67,7 @@ func (c *OAuthClient) Authorize(username, password string) (string, error) {
 	form := url.Values{
 		"client_id":    {c.clientId},
 		"redirect_uri": {c.redirectUri},
+		"scope":        {c.scope},
 		"username":     {username},
 		"password":     {password},
 	}

@@ -49,11 +49,10 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	defer func() {
-		_ = snapshot.Restore()
-		oid4vci.StopTestIssuerServer(as)
-	}()
-
 	code := m.Run()
+
+	_ = snapshot.Restore()
+	oid4vci.StopTestIssuerServer(as)
+
 	os.Exit(code)
 }

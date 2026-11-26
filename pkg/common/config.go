@@ -84,6 +84,30 @@ func GetAppConfig() (*AppConfig, error) {
 	return appConfig, nil
 }
 
+// CredentialConfigurationIdsForScope resolves scope — a space-separated
+// OAuth scope string, as sent in an authorization request — to the
+// credential_configuration_ids it grants per cfg.Scopes, in declaration
+// order and without duplicates. A scope value with no matching ScopeConfig
+// is ignored.
+func (cfg *AppConfig) CredentialConfigurationIdsForScope(scope string) []string {
+	seen := make(map[string]bool)
+	var ids []string
+	for _, name := range strings.Fields(scope) {
+		for _, sc := range cfg.Scopes {
+			if sc.Name != name {
+				continue
+			}
+			for _, id := range sc.CredentialConfigurationIds {
+				if !seen[id] {
+					seen[id] = true
+					ids = append(ids, id)
+				}
+			}
+		}
+	}
+	return ids
+}
+
 // Private -------------------------------------------------------------------------------------------------------------
 
 var appConfig *AppConfig
