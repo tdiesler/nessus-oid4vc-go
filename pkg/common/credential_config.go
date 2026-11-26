@@ -4,11 +4,12 @@ package common
 
 // CredentialConfig is one statically declared credential configuration this
 // issuer can produce: the format and verifiable credential type a holder
-// receives under its Id.
+// receives under its Id, and the claims it discloses.
 type CredentialConfig struct {
 	Id     string
 	Format string
 	Vct    string
+	Claims []string
 }
 
 // ScopeConfig ==================================================================================================================

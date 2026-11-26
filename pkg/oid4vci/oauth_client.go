@@ -126,6 +126,17 @@ func (c *OAuthClient) ExchangeCode(code string) (*TokenResponse, error) {
 	return &token, nil
 }
 
+// FetchCredentialIssuerMetadata fetches the authorization server's OID4VCI
+// credential issuer metadata document.
+func (c *OAuthClient) FetchCredentialIssuerMetadata() (*co.CredentialIssuerMetadata, error) {
+	req := co.NewHttpGetRequest(c.baseUrl + "/.well-known/openid-credential-issuer")
+	metadata, err := req.Fetch[co.CredentialIssuerMetadata](c.httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("fetch credential issuer metadata: %w", err)
+	}
+	return &metadata, nil
+}
+
 // FetchJWKS fetches the authorization server's JWKS document.
 func (c *OAuthClient) FetchJWKS() (*jose.JSONWebKeySet, error) {
 	return co.FetchJWKS(c.httpClient, c.baseUrl+"/jwks.json")

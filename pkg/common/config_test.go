@@ -16,9 +16,10 @@ func TestAppConfigLoading(t *testing.T) {
 	require.Equal(t, "http://localhost:8400/callback", cfg.RedirectUri)
 	require.Equal(t, "http://127.0.0.1:9000", cfg.Oid4vciAddr)
 
+	claims := []string{"id", "email", "firstName", "familyName"}
 	require.Equal(t, []CredentialConfig{
-		{Id: "natural_person_sd", Format: "dc+sd-jwt", Vct: "NaturalPerson"},
-		{Id: "natural_person_jwt", Format: "jwt_vc_json", Vct: "NaturalPerson"},
+		{Id: "natural_person_sd", Format: "dc+sd-jwt", Vct: "NaturalPerson", Claims: claims},
+		{Id: "natural_person_jwt", Format: "jwt_vc_json", Vct: "NaturalPerson", Claims: claims},
 	}, cfg.CredentialConfigurations)
 	require.Equal(t, []ScopeConfig{
 		{Name: "natural_person", CredentialConfigurationIds: []string{"natural_person_sd", "natural_person_jwt"}},

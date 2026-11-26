@@ -11,9 +11,11 @@ CredentialConfigurations:
   - Id: natural_person_sd
     Format: dc+sd-jwt
     Vct: NaturalPerson
+    Claims: [id, email, firstName, familyName]
   - Id: natural_person_jwt
     Format: jwt_vc_json
     Vct: NaturalPerson
+    Claims: [id, email, firstName, familyName]
 
 Scopes:
   - Name: natural_person
