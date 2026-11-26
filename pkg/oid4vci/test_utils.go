@@ -10,31 +10,30 @@ import (
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/holder"
 )
 
-// StartTestIssuerServer constructs and starts an AuthorizationServer for issuer,
+// StartTestIssuer constructs and starts a CredentialIssuer for issuer,
 // bound to addr.
-func StartTestIssuerServer(addr string) (*AuthorizationServer, error) {
-	as, err := NewAuthorizationServer(addr)
+func StartTestIssuer(addr string) (*CredentialIssuer, error) {
+	ci, err := NewCredentialIssuer(addr)
 	if err != nil {
 		return nil, err
 	}
-	if err := as.Start(); err != nil {
+	if err := ci.Start(); err != nil {
 		return nil, err
 	}
-	return as, nil
+	return ci, nil
 }
 
-// StopTestIssuerServer shuts down as, ignoring any error — paired with
-// StartTestIssuerServer in a TestMain's teardown.
-func StopTestIssuerServer(as *AuthorizationServer) {
-	_ = as.Shutdown()
+// StopTestIssuer shuts down ci, ignoring any error — paired with
+// StartTestIssuer in a TestMain's teardown.
+func StopTestIssuer(ci *CredentialIssuer) {
+	_ = ci.Shutdown()
 }
 
-// SetupTestIssuerVault points the holder's vault issuer at addr — this
-// package's own test AuthorizationServer, rather than whatever a prior
+// SetupTestIssuer points the holder's vault issuer at addr — this
+// package's own test CredentialIssuer, rather than whatever a prior
 // manual `oid4vc` run against the real server last left on disk — and
-// snapshots wallet.vault.json first, so the caller can restore it once
-// tests are done.
-func SetupTestIssuerVault(addr string) (*co.FileSnapshot, error) {
+// snapshots wallet.vault.json first, so the caller can restore it.
+func SetupTestIssuer(addr string) (*co.FileSnapshot, error) {
 
 	path := filepath.Join(co.HomeDir(), ".config", "wallet.vault.json")
 	snapshot, err := co.NewFileSnapshot(path)

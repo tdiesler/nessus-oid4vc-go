@@ -88,7 +88,7 @@ type CredentialIssuerMetadata struct {
 // NewCredentialIssuerMetadata builds the credential issuer metadata
 // document for issuer, from cfg's configured credential configurations and
 // the scopes that grant them. issuer is also this document's sole
-// authorization server: this service's AuthorizationServer is both.
+// authorization server: this service's oid4vci.CredentialIssuer is both.
 func NewCredentialIssuerMetadata(issuer string, cfg *AppConfig) *CredentialIssuerMetadata {
 
 	scopeByConfigId := make(map[string]string, len(cfg.Scopes))

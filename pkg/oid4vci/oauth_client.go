@@ -1,6 +1,7 @@
 package oid4vci
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,8 +15,8 @@ import (
 
 // OAuthClient ===============================================================================================================
 
-// OAuthClient drives an OAuth 2.0 Authorization Code flow against an
-// AuthorizationServer from the client's side — the role a holder plays
+// OAuthClient drives an OAuth 2.0 Authorization Code flow against a
+// CredentialIssuer from the client's side — the role a holder plays
 // against this service, as a public client (RFC 6749 §2.1), with no
 // secret. Unlike Client (this server's registration record for a caller),
 // OAuthClient is the caller itself; it has no dependency on testing and is
@@ -126,6 +127,48 @@ func (c *OAuthClient) ExchangeCode(code string) (*TokenResponse, error) {
 	return &token, nil
 }
 
+// FetchCredential requests a credential from /credential, naming it by
+// credentialIdentifier (from authorization_details), proving possession of
+// a holder key via proofJwt, and authenticating with accessToken. Returns
+// the issued credential string.
+func (c *OAuthClient) FetchCredential(accessToken, credentialIdentifier, proofJwt string) (string, error) {
+	reqBody := credentialRequest{CredentialIdentifier: credentialIdentifier}
+	reqBody.Proofs.Jwt = []string{proofJwt}
+	data, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("fetch credential: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.baseUrl+"/credential", bytes.NewReader(data))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch credential: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("fetch credential: read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("fetch credential: %s: %s", resp.Status, body)
+	}
+
+	var cred credentialResponse
+	if err := json.Unmarshal(body, &cred); err != nil {
+		return "", fmt.Errorf("fetch credential: decode response: %w", err)
+	}
+	if len(cred.Credentials) == 0 {
+		return "", fmt.Errorf("fetch credential: no credentials in response")
+	}
+	return cred.Credentials[0].Credential, nil
+}
+
 // FetchCredentialIssuerMetadata fetches the authorization server's OID4VCI
 // credential issuer metadata document.
 func (c *OAuthClient) FetchCredentialIssuerMetadata() (*co.CredentialIssuerMetadata, error) {
@@ -140,6 +183,26 @@ func (c *OAuthClient) FetchCredentialIssuerMetadata() (*co.CredentialIssuerMetad
 // FetchJWKS fetches the authorization server's JWKS document.
 func (c *OAuthClient) FetchJWKS() (*jose.JSONWebKeySet, error) {
 	return co.FetchJWKS(c.httpClient, c.baseUrl+"/jwks.json")
+}
+
+// FetchNonce fetches a fresh c_nonce from /nonce, required to bind the next
+// key-proof JWT to the credential request it accompanies.
+func (c *OAuthClient) FetchNonce() (string, error) {
+	resp, err := c.httpClient.Post(c.baseUrl+"/nonce", "application/json", nil)
+	if err != nil {
+		return "", fmt.Errorf("fetch nonce: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("fetch nonce: %s: %s", resp.Status, body)
+	}
+
+	var nonce nonceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&nonce); err != nil {
+		return "", fmt.Errorf("fetch nonce: decode response: %w", err)
+	}
+	return nonce.CNonce, nil
 }
 
 // UserInfo fetches claims for accessToken from /userinfo.

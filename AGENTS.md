@@ -141,9 +141,9 @@ current as new conventions get established.
   (co.UserAlice/co.UserPassword) `scripts/keycloak-setup` already created,
   reading that realm's wallet.keycloak.json (see pkg/holder) rather than
   creating their own realm/client/user.
-- The vault flavor's oid4vci `AuthorizationServer` is test-owned: a
+- The vault flavor's oid4vci `CredentialIssuer` is test-owned: a
   package's `TestMain` starts its own instance (`pkg/oid4vci`'s
-  `StartTestServer`/`StopTestServer`, see `pkg/oid4vci/test_utils.go`)
+  `StartTestIssuer`/`StopTestIssuer`, see `pkg/oid4vci/test_utils.go`)
   rather than assuming one is already running, since this is the component
   actively under development. The keycloak flavor has no equivalent —
   tests assume a reachable realm from `scripts/keycloak-setup`, matching

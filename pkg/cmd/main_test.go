@@ -25,7 +25,7 @@ const (
 // this process — so an "alice" session a test logs into is the same shape
 // of holder state a manual `oid4vc login` run would produce. The one thing
 // a terminal session wouldn't otherwise have running is the oid4vci server
-// itself, so TestMain starts that (via oid4vci.StartTestIssuerServer, the vault
+// itself, so TestMain starts that (via oid4vci.StartTestIssuer, the vault
 // flavor's own test server — unlike the keycloak flavor, which is assumed
 // already set up and reachable, see scripts/keycloak-setup) and points the
 // vault wallet issuer at it for the run, restoring wallet.vault.json to
@@ -37,13 +37,13 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv("NESSUS_OID4VC_OID4VCI_ADDR", testOid4vciAddr)
 	_ = os.Setenv("NESSUS_OID4VC_VAULT_REDIRECTURI", testRedirectUri)
 
-	as, err := oid4vci.StartTestIssuerServer("http://" + testOid4vciAddr)
+	as, err := oid4vci.StartTestIssuer("http://" + testOid4vciAddr)
 	if err != nil {
 		co.ErrorE(err)
 		os.Exit(1)
 	}
 
-	snapshot, err := oid4vci.SetupTestIssuerVault(as.BaseURL)
+	snapshot, err := oid4vci.SetupTestIssuer(as.BaseURL)
 	if err != nil {
 		co.ErrorE(err)
 		os.Exit(1)
@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	_ = snapshot.Restore()
-	oid4vci.StopTestIssuerServer(as)
+	oid4vci.StopTestIssuer(as)
 
 	os.Exit(code)
 }

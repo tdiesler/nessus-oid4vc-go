@@ -18,7 +18,7 @@ type RootOpts struct {
 }
 
 // NewRootCmd builds the oid4vc command tree: wallet operations against an
-// issuer, plus run-server to run the oid4vci AuthorizationServer itself.
+// issuer, plus run-server to run the oid4vci CredentialIssuer itself.
 // With no subcommand it enters the interactive REPL (see NewReplCmd).
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{

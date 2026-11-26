@@ -17,12 +17,13 @@ import (
 // plus the client/redirect_uri context needed to validate a later token
 // request against the request that originally produced this Session.
 type Session struct {
-	Subject     string
-	VaultToken  *vault.AccessToken
-	ClientId    string
-	RedirectUri string
-	Scope       string
-	ExpiresAt   time.Time
+	Subject              string
+	ClientId             string
+	RedirectUri          string
+	Scope                string
+	VaultToken           *vault.AccessToken
+	AuthorizationDetails []AuthorizationDetail
+	ExpiresAt            time.Time
 }
 
 // NewSession constructs a Session that expires after ttl.
@@ -35,6 +36,15 @@ func NewSession(subject string, vaultToken *vault.AccessToken, clientId, redirec
 		Scope:       scope,
 		ExpiresAt:   time.Now().Add(ttl),
 	}
+}
+
+// WithAuthorizationDetails sets the authorization_details s' access token
+// was granted at token exchange — the Credential Endpoint's source of
+// truth for which credential_identifiers a later credential request may
+// name.
+func (s *Session) WithAuthorizationDetails(details []AuthorizationDetail) *Session {
+	s.AuthorizationDetails = details
+	return s
 }
 
 // Expired reports whether s is past its ExpiresAt.
@@ -131,6 +141,48 @@ func (s *SessionStore) Session(accessToken string) (*Session, error) {
 		return nil, fmt.Errorf("invalid or expired access token")
 	}
 	return session, nil
+}
+
+// NonceStore ==============================================================================================================
+
+// NonceStore holds this authorization server's short-lived, single-use
+// c_nonce values (OID4VCI's Nonce Endpoint): anti-replay values a holder's
+// key-proof JWT must name and spend exactly once.
+type NonceStore struct {
+	mu     sync.Mutex
+	nonces map[string]time.Time
+}
+
+// NewNonceStore constructs an empty NonceStore.
+func NewNonceStore() *NonceStore {
+	return &NonceStore{nonces: map[string]time.Time{}}
+}
+
+// Consume looks up and deletes nonce — single-use, as a key-proof's
+// anti-replay nonce must be.
+func (s *NonceStore) Consume(nonce string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	expiresAt, ok := s.nonces[nonce]
+	delete(s.nonces, nonce)
+	if !ok || time.Now().After(expiresAt) {
+		return fmt.Errorf("invalid or expired nonce")
+	}
+	return nil
+}
+
+// Issue mints a fresh, single-use nonce that expires after nonceTTL.
+func (s *NonceStore) Issue() (string, error) {
+	nonce, err := randomToken()
+	if err != nil {
+		return "", err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nonces[nonce] = time.Now().Add(nonceTTL)
+	return nonce, nil
 }
 
 // Functions ---------------------------------------------------------------------------------------------------------

@@ -19,17 +19,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	as, err := oid4vci.NewAuthorizationServer(issuer.IssuerURL)
+	ci, err := oid4vci.NewCredentialIssuer(issuer.IssuerURL)
 	if err != nil {
 		co.ErrorE(err)
 		os.Exit(1)
 	}
-	if err = as.Start(); err != nil {
+	if err = ci.Start(); err != nil {
 		co.ErrorE(err)
 		os.Exit(1)
 	}
 	defer func() {
-		_ = as.Shutdown()
+		_ = ci.Shutdown()
 	}()
 
 	if err = cmd.NewRootCmd().Execute(); err != nil {

@@ -84,6 +84,17 @@ func GetAppConfig() (*AppConfig, error) {
 	return appConfig, nil
 }
 
+// CredentialConfigurationById returns cfg's CredentialConfig for id, and
+// whether one is declared.
+func (cfg *AppConfig) CredentialConfigurationById(id string) (CredentialConfig, bool) {
+	for _, cc := range cfg.CredentialConfigurations {
+		if cc.Id == id {
+			return cc, true
+		}
+	}
+	return CredentialConfig{}, false
+}
+
 // CredentialConfigurationIdsForScope resolves scope — a space-separated
 // OAuth scope string, as sent in an authorization request — to the
 // credential_configuration_ids it grants per cfg.Scopes, in declaration

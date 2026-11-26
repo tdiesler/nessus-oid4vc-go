@@ -12,20 +12,21 @@ import (
 
 // NewMux builds this authorization server's HTTP route table: discovery,
 // the Authorization Code flow's /authorize and /token endpoints, /userinfo,
-// /revoke, and the JWKS document /token's id_tokens verify against. This is
-// the only file in the package that knows about net/http — a future Vault
-// plugin would replace just this file with logical.Backend paths, calling
-// the same AuthorizationServer underneath.
-func NewMux(as *AuthorizationServer) *http.ServeMux {
+// /revoke, and the JWKS document /token's id_tokens verify against. This
+// file holds every HTTP-specific concern (routes, request/response
+// encoding), kept separate from CredentialIssuer's own protocol logic.
+func NewMux(ci *CredentialIssuer) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /.well-known/openid-configuration", handleDiscovery(as))
-	mux.HandleFunc("GET /.well-known/openid-credential-issuer", handleCredentialIssuerMetadata(as))
-	mux.HandleFunc("GET /authorize", handleAuthorizeForm(as))
-	mux.HandleFunc("POST /authorize", handleAuthorizeLogin(as))
-	mux.HandleFunc("POST /token", handleToken(as))
-	mux.HandleFunc("POST /revoke", handleRevoke(as))
-	mux.HandleFunc("GET /userinfo", handleUserInfo(as))
-	mux.HandleFunc("GET /jwks.json", handleJWKS(as))
+	mux.HandleFunc("GET /.well-known/openid-configuration", handleDiscovery(ci))
+	mux.HandleFunc("GET /.well-known/openid-credential-issuer", handleCredentialIssuerMetadata(ci))
+	mux.HandleFunc("GET /authorize", handleAuthorizeForm(ci))
+	mux.HandleFunc("POST /authorize", handleAuthorizeLogin(ci))
+	mux.HandleFunc("POST /token", handleToken(ci))
+	mux.HandleFunc("POST /nonce", handleNonce(ci))
+	mux.HandleFunc("POST /credential", handleCredential(ci))
+	mux.HandleFunc("POST /revoke", handleRevoke(ci))
+	mux.HandleFunc("GET /userinfo", handleUserInfo(ci))
+	mux.HandleFunc("GET /jwks.json", handleJWKS(ci))
 	return mux
 }
 
@@ -58,12 +59,12 @@ type loginFormData struct {
 	State       string
 }
 
-func handleAuthorizeForm(as *AuthorizationServer) http.HandlerFunc {
+func handleAuthorizeForm(ci *CredentialIssuer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		clientId, redirectUri, responseType := q.Get("client_id"), q.Get("redirect_uri"), q.Get("response_type")
 
-		if err := as.ValidateAuthorizationRequest(clientId, redirectUri, responseType); err != nil {
+		if err := ci.ValidateAuthorizationRequest(clientId, redirectUri, responseType); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -74,7 +75,7 @@ func handleAuthorizeForm(as *AuthorizationServer) http.HandlerFunc {
 	}
 }
 
-func handleAuthorizeLogin(as *AuthorizationServer) http.HandlerFunc {
+func handleAuthorizeLogin(ci *CredentialIssuer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -83,7 +84,7 @@ func handleAuthorizeLogin(as *AuthorizationServer) http.HandlerFunc {
 
 		clientId, redirectUri, scope, state := r.FormValue("client_id"), r.FormValue("redirect_uri"), r.FormValue("scope"), r.FormValue("state")
 
-		code, err := as.CompleteLogin(clientId, redirectUri, scope, r.FormValue("username"), r.FormValue("password"))
+		code, err := ci.CompleteLogin(clientId, redirectUri, scope, r.FormValue("username"), r.FormValue("password"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
@@ -105,48 +106,111 @@ func handleAuthorizeLogin(as *AuthorizationServer) http.HandlerFunc {
 	}
 }
 
-func handleCredentialIssuerMetadata(as *AuthorizationServer) http.HandlerFunc {
-	metadata := co.NewCredentialIssuerMetadata(as.Issuer, as.cfg)
+// credentialRequest is the OID4VCI Credential Request body this endpoint
+// accepts: a single proof naming a credential_identifier (from
+// authorization_details). credential_configuration_id requests aren't
+// supported — the holder CLI only ever sends credential_identifier.
+type credentialRequest struct {
+	CredentialIdentifier string `json:"credential_identifier"`
+	Proofs               struct {
+		Jwt []string `json:"jwt"`
+	} `json:"proofs"`
+}
+
+// credentialResponse is the OID4VCI Credential Response body.
+type credentialResponse struct {
+	Credentials []credentialResponseEntry `json:"credentials"`
+}
+
+type credentialResponseEntry struct {
+	Credential string `json:"credential"`
+}
+
+// nonceResponse is the OID4VCI Nonce Response body.
+type nonceResponse struct {
+	CNonce string `json:"c_nonce"`
+}
+
+func handleCredential(ci *CredentialIssuer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, metadata)
+		const prefix = "Bearer "
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, prefix) {
+			http.Error(w, "missing bearer token", http.StatusUnauthorized)
+			return
+		}
+
+		var req credentialRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(req.Proofs.Jwt) != 1 {
+			http.Error(w, "exactly one jwt proof is required", http.StatusBadRequest)
+			return
+		}
+
+		credential, err := ci.IssueCredential(strings.TrimPrefix(auth, prefix), req.CredentialIdentifier, req.Proofs.Jwt[0])
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, credentialResponse{Credentials: []credentialResponseEntry{{Credential: credential}}})
 	}
 }
 
-func handleDiscovery(as *AuthorizationServer) http.HandlerFunc {
-	metadata := NewMetadata(as.Issuer, as.cfg)
+func handleCredentialIssuerMetadata(ci *CredentialIssuer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, metadata)
+		writeJSON(w, http.StatusOK, co.NewCredentialIssuerMetadata(ci.Issuer, ci.cfg))
 	}
 }
 
-func handleJWKS(as *AuthorizationServer) http.HandlerFunc {
+func handleDiscovery(ci *CredentialIssuer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, as.signer.JWKS())
+		writeJSON(w, http.StatusOK, NewMetadata(ci.Issuer, ci.cfg))
+	}
+}
+
+func handleJWKS(ci *CredentialIssuer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, ci.signer.JWKS())
+	}
+}
+
+func handleNonce(ci *CredentialIssuer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		nonce, err := ci.IssueNonce()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, nonceResponse{CNonce: nonce})
 	}
 }
 
 // handleRevoke implements RFC 7009 token revocation: always a 200,
 // whether or not token was valid/known, to avoid leaking which tokens are
 // live.
-func handleRevoke(as *AuthorizationServer) http.HandlerFunc {
+func handleRevoke(ci *CredentialIssuer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		_ = as.Logout(r.FormValue("token"))
+		_ = ci.Logout(r.FormValue("token"))
 		w.WriteHeader(http.StatusOK)
 	}
 }
 
-func handleToken(as *AuthorizationServer) http.HandlerFunc {
+func handleToken(ci *CredentialIssuer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		token, err := as.ExchangeCode(r.FormValue("code"), r.FormValue("client_id"), r.FormValue("redirect_uri"))
+		token, err := ci.ExchangeCode(r.FormValue("code"), r.FormValue("client_id"), r.FormValue("redirect_uri"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -156,7 +220,7 @@ func handleToken(as *AuthorizationServer) http.HandlerFunc {
 	}
 }
 
-func handleUserInfo(as *AuthorizationServer) http.HandlerFunc {
+func handleUserInfo(ci *CredentialIssuer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const prefix = "Bearer "
 		auth := r.Header.Get("Authorization")
@@ -165,7 +229,7 @@ func handleUserInfo(as *AuthorizationServer) http.HandlerFunc {
 			return
 		}
 
-		claims, err := as.ReadSubjectsKeyValueClaims(strings.TrimPrefix(auth, prefix))
+		claims, err := ci.ReadSubjectsKeyValueClaims(strings.TrimPrefix(auth, prefix))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return

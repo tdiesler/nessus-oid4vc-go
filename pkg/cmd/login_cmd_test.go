@@ -9,7 +9,7 @@ import (
 )
 
 // TestLogin drives login then logout headlessly against each flavor — a
-// real AuthorizationServer (fronting the real Vault) for "vault", and the
+// real CredentialIssuer (fronting the real Vault) for "vault", and the
 // real Keycloak realm scripts/keycloak-setup already configured for
 // "keycloak" — confirming both the session a login establishes and its
 // removal on logout persist to the holder's on-disk state.

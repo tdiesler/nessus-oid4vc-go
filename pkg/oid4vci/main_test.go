@@ -13,11 +13,11 @@ import (
 // things, and this exists partly to prove that distinction actually works.
 const testIssuer = "https://oid4vci.test.local"
 
-// authServer is this package's single running AuthorizationServer, exposed
+// authServer is this package's single running CredentialIssuer, exposed
 // so tests can call it directly — the same way pkg/vault's tests call
 // EntityAccessor/KeyValueAccessor directly on a native Vault token — rather
 // than only ever reaching it through OAuthClient's HTTP calls.
-var authServer *AuthorizationServer
+var authServer *CredentialIssuer
 
 func TestMain(m *testing.M) {
 	co.InitLogging()
@@ -28,16 +28,16 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	// Start once for the whole package: AuthorizationServer binds a fixed,
+	// Start once for the whole package: CredentialIssuer binds a fixed,
 	// configured address (cfg.Oid4vci.Addr).
-	as, err := StartTestIssuerServer(cfg.Oid4vciAddr)
+	ci, err := StartTestIssuer(cfg.Oid4vciAddr)
 	if err != nil {
-		co.ErrorE(fmt.Errorf("cannot start AuthorizationServer: %w", err))
+		co.ErrorE(fmt.Errorf("cannot start CredentialIssuer: %w", err))
 		os.Exit(1)
 	}
-	authServer = as.WithIssuer(testIssuer)
+	authServer = ci.WithIssuer(testIssuer)
 	defer func() {
-		StopTestIssuerServer(as)
+		StopTestIssuer(ci)
 	}()
 
 	os.Exit(m.Run())

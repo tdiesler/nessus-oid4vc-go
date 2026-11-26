@@ -60,13 +60,13 @@ func (w *Wallet) CreateKey(name string) (string, error) {
 
 // GetCredential fetches a credential for h's user from h's issuer, naming
 // it by credentialIdentifier (from authorization_details captured at
-// login) or credentialConfigurationId, proving possession of the holder
-// key named key — or h's user's default key — refreshing the session's
-// token first if it's near expiry. Stores and returns the issued
-// credential.
+// login), proving possession of the holder key named key — or h's user's
+// default key. Refreshes the session's token first if it's near expiry and
+// a refresh token is available, failing clearly instead if not. Stores and
+// returns the issued credential.
 func (w *Wallet) GetCredential(key, credentialIdentifier string) (string, error) {
 	if credentialIdentifier == "" {
-		return "", fmt.Errorf("either a credential identifier or credential configuration is required")
+		return "", fmt.Errorf("either a credential identifier is required")
 	}
 
 	conn, ok := w.issuer.Users[w.username]
@@ -77,26 +77,29 @@ func (w *Wallet) GetCredential(key, credentialIdentifier string) (string, error)
 
 	holderKey, err := conn.HolderKey(key)
 	if err != nil {
-		return "", fmt.Errorf("%w; run 'oid4vc key create' first", err)
+		return "", err
 	}
 
 	if conn.Token.ExpiresWithin(30 * time.Second) {
+		if conn.Token.RefreshToken == "" {
+			return "", fmt.Errorf("access token expired; run 'oid4vc login' again")
+		}
 		if err := w.refreshSession(conn); err != nil {
 			return "", err
 		}
 	}
 
-	// Keycloak serves its own oid4vc protocol endpoints directly under the
-	// realm, not via OIDC discovery.
-	nonceEndpoint := w.issuer.IssuerURL + "/protocol/oid4vc/nonce"
-	credentialEndpoint := w.issuer.IssuerURL + "/protocol/oid4vc/credential"
-
-	cNonce, err := fetchNonce(nonceEndpoint, conn.Token.AccessToken)
+	metadata, err := discoverCredentialIssuerMetadata(w.issuer.IssuerURL)
 	if err != nil {
 		return "", err
 	}
 
-	vc, err := fetchCredential(credentialEndpoint, conn.Token.AccessToken, conn.ClientId, w.issuer.IssuerURL, credentialIdentifier, holderKey, cNonce)
+	cNonce, err := fetchNonce(metadata.NonceEndpoint, conn.Token.AccessToken)
+	if err != nil {
+		return "", err
+	}
+
+	vc, err := fetchCredential(metadata.CredentialEndpoint, conn.Token.AccessToken, conn.ClientId, w.issuer.IssuerURL, credentialIdentifier, holderKey, cNonce)
 	if err != nil {
 		return "", err
 	}
