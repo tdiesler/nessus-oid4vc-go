@@ -24,7 +24,10 @@ func TestCobraCompletions(t *testing.T) {
 	show := cobraCompletions([]string{"show", ""})
 	require.Contains(t, show, "credential-issuer-metadata")
 	require.Contains(t, show, "openid-configuration")
-	require.Contains(t, show, "state")
+	require.Contains(t, show, "login")
+	require.Contains(t, show, "keys")
+	require.Contains(t, show, "vcs")
+	require.Contains(t, show, "vc")
 
 	loginFlags := cobraCompletions([]string{"login", "--"})
 	require.Contains(t, loginFlags, "--issuer")
@@ -37,7 +40,8 @@ func TestCobraCompletions(t *testing.T) {
 // resolve a command line's already-typed --issuer/--user against a
 // synthetic issuer (torn down via t.Cleanup, leaving real holder state
 // untouched), offering its known usernames, previously-used client IDs,
-// holder key names, and credential identifiers.
+// holder key names, granted credential identifiers, and stored credential
+// identifiers ("show vc"'s positional selector argument).
 func TestCompleteFlagValues(t *testing.T) {
 	const alias = "repltest"
 	path := filepath.Join(co.HomeDir(), ".config", "wallet."+alias+".json")
@@ -53,6 +57,8 @@ func TestCompleteFlagValues(t *testing.T) {
 	conn.AuthorizationDetails = []holder.AuthorizationDetail{
 		holder.NewAuthorizationDetail("openid_credential", "natural_person", []string{"cred-1", "cred-2"}),
 	}
+	conn.SetCredential("natural_person_sd_0000", "sd-jwt-placeholder")
+	conn.SetCredential("natural_person_jwt_0000", "jwt-placeholder")
 	issuer.Users["alice"] = conn
 
 	state, err := holder.LoadWalletState()
@@ -77,6 +83,11 @@ func TestCompleteFlagValues(t *testing.T) {
 	require.Equal(t, []string{kid}, keys)
 	ids, _ := completeCredentialIdentifier(vcCmd, nil, "")
 	require.ElementsMatch(t, []string{"cred-1", "cred-2"}, ids)
+
+	showVcCmd := NewShowVcCmd()
+	require.NoError(t, showVcCmd.ParseFlags([]string{"--issuer", alias, "--user", "alice"}))
+	storedIds, _ := completeStoredCredentialIdentifier(showVcCmd, nil, "")
+	require.Equal(t, []string{"natural_person_jwt_0000", "natural_person_sd_0000"}, storedIds)
 }
 
 // TestRunReplLine confirms the REPL's own exit/blank-line handling, without

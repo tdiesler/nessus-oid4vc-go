@@ -101,6 +101,17 @@ func completeScope(cmd *cobra.Command, args []string, toComplete string) ([]stri
 	return scopes, cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeStoredCredentialIdentifier offers cmd's resolved user's stored
+// credential identifiers as completions for "show vc"'s positional
+// selector argument.
+func completeStoredCredentialIdentifier(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	conn, err := resolveCompletionConnection(cmd)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return sortedCredentialIdentifiers(conn), cobra.ShellCompDirectiveNoFileComp
+}
+
 // completeUsername offers cmd's resolved issuer's known usernames as
 // completions for --user.
 func completeUsername(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
