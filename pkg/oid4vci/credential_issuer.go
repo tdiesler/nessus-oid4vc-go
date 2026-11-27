@@ -11,6 +11,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
+	"github.com/tdiesler/nessus-oid4vc-go/pkg/jwtvc"
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/sdjwt"
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/vault"
 )
@@ -216,10 +217,10 @@ func (ci *CredentialIssuer) ExchangeCode(code, clientId, redirectUri string) (*T
 // IssueCredential is the Credential Endpoint's core logic: it resolves
 // credentialIdentifier to a credential_configuration_id the access token
 // was actually granted (AuthorizedCredentialConfigurationId), verifies
-// proofJwt proves possession of a holder key (VerifyKeyProof), and builds
-// an SD-JWT VC binding that key, naming the configuration's declared
-// claims, sourced from the holder's own Vault KV data. Only the dc+sd-jwt
-// format is supported.
+// proofJwt proves possession of a holder key (VerifyKeyProof), and builds a
+// credential binding that key, naming the configuration's declared claims,
+// sourced from the holder's own Vault KV data — an SD-JWT VC for
+// dc+sd-jwt, or a jwt_vc_json credential for jwt_vc_json.
 func (ci *CredentialIssuer) IssueCredential(accessToken, credentialIdentifier, proofJwt string) (string, error) {
 	session, err := ci.sessions.Session(accessToken)
 	if err != nil {
@@ -234,9 +235,6 @@ func (ci *CredentialIssuer) IssueCredential(accessToken, credentialIdentifier, p
 	if !ok {
 		return "", fmt.Errorf("credential configuration %q not found", configId)
 	}
-	if config.Format != "dc+sd-jwt" {
-		return "", fmt.Errorf("credential format %q is not supported at this endpoint", config.Format)
-	}
 
 	holderKey, err := ci.VerifyKeyProof(session.ClientId, proofJwt)
 	if err != nil {
@@ -248,20 +246,41 @@ func (ci *CredentialIssuer) IssueCredential(accessToken, credentialIdentifier, p
 		return "", err
 	}
 
-	builder, err := sdjwt.NewBuilder(config.Vct, jose.SigningKey{Algorithm: jose.ES256, Key: ci.signer})
-	if err != nil {
-		return "", err
-	}
-	builder.WithIssuer(ci.Issuer).WithSubject(session.Subject).WithHolderBinding(*holderKey)
-	for _, name := range config.Claims {
-		value, ok := subjectClaims[name]
-		if !ok {
-			return "", fmt.Errorf("claim %q declared for %q not found for subject %q", name, configId, session.Subject)
+	signingKey := jose.SigningKey{Algorithm: jose.ES256, Key: ci.signer}
+	switch config.Format {
+	case "dc+sd-jwt":
+		builder, err := sdjwt.NewBuilder(config.Vct, signingKey)
+		if err != nil {
+			return "", err
 		}
-		builder.WithDisclosableClaim(name, value)
-	}
+		builder.WithIssuer(ci.Issuer).WithSubject(session.Subject).WithHolderBinding(*holderKey)
+		for _, name := range config.Claims {
+			value, ok := subjectClaims[name]
+			if !ok {
+				return "", fmt.Errorf("claim %q declared for %q not found for subject %q", name, configId, session.Subject)
+			}
+			builder.WithDisclosableClaim(name, value)
+		}
+		return builder.Build()
 
-	return builder.Build()
+	case "jwt_vc_json":
+		builder, err := jwtvc.NewBuilder(config.Vct, signingKey)
+		if err != nil {
+			return "", err
+		}
+		builder.WithIssuer(ci.Issuer).WithSubject(session.Subject).WithHolderBinding(*holderKey)
+		for _, name := range config.Claims {
+			value, ok := subjectClaims[name]
+			if !ok {
+				return "", fmt.Errorf("claim %q declared for %q not found for subject %q", name, configId, session.Subject)
+			}
+			builder.WithClaim(name, value)
+		}
+		return builder.Build()
+
+	default:
+		return "", fmt.Errorf("credential format %q is not supported at this endpoint", config.Format)
+	}
 }
 
 // IssueNonce mints a fresh, single-use c_nonce (OID4VCI's Nonce Endpoint),

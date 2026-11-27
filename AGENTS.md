@@ -19,7 +19,10 @@ current as new conventions get established.
 - A question is not a request to act. When the user asks something phrased
   as a question ("do we need X?", "would Y work?"), answer it — don't treat
   it as authorization to go implement the answer. Wait for an explicit
-  go-ahead before changing files.
+  go-ahead before changing files — including when a discussion has clearly
+  been trending toward one option; a lack of pushback isn't a go-ahead
+  either. For an ambiguous-scope instruction (e.g. "remove it"), clarify
+  exactly what "it" refers to before touching files.
 - In prose, surround em dashes with spaces (`word — word`).
 - Treat user suggestions as hypotheses to evaluate, not decisions to affirm
   automatically. Check them against the stated objective, current evidence,
@@ -33,6 +36,15 @@ current as new conventions get established.
   objections when the evidence supports the proposal.
 - Always provide complete, copyable command lines when suggesting test runs.
   Join multiple suggested test runs with `&&` so execution stops on failure.
+- When in doubt about a protocol/standard's required behavior or exact claim
+  shape (OID4VCI, W3C VC Data Model, relevant RFCs, ...), consult the actual
+  spec text rather than inferring it solely from a reference implementation's
+  output (e.g. Keycloak's) — a reference implementation can make its own
+  non-normative convention choices.
+- Durable conventions and working-agreement feedback established for this
+  project belong in `AGENTS.md`, committed to git — not only in the agent's
+  own private cross-session memory — so they travel with the repo for any
+  collaborator or future agent session.
 - Keep `AGENTS.md` focused on durable agent instructions and cross-cutting
   invariants. Document user-facing behavior in Go doc comments and CLI help so
   it is visible alongside the relevant code in the IDE. Avoid duplicating
@@ -46,9 +58,15 @@ current as new conventions get established.
 - Vault stays unmodified for this POC: it's used as the auth backend
   (OIDC/userpass → Identity entities), the claims source (KV v2), and the
   signer (Transit) — the issuer service never holds a private key.
-- Confirmed POC defaults: **SD-JWT VC** credential format,
-  **pre-authorized code** issuance flow, **1:1** Vault Identity entity to
-  credential subject mapping.
+- Confirmed POC defaults: config-driven credential formats (**dc+sd-jwt**
+  and **jwt_vc_json**, see `pkg/sdjwt`/`pkg/jwtvc`), the **Authorization
+  Code** issuance flow, and **1:1** Vault Identity entity to credential
+  subject mapping.
+- The wallet CLI is split into `pkg/cmd` (the command-tree library) and
+  `pkg/oid4vc` (the `main` binary wiring it up) — not one combined package.
+- `pkg/oid4vci`'s core protocol logic is separated from its `net/http`
+  transport: `handlers.go` is the only file in the package that knows about
+  `net/http`.
 - Wallets only ever talk to our issuer service — never directly to Vault,
   even where Vault exposes a usable raw endpoint (e.g. its own OIDC Provider,
   or `sys/wrapping/unwrap`). Reasons: (1) Vault has no concept of OID4VCI
@@ -122,6 +140,12 @@ current as new conventions get established.
   moment the plan changes. State the current fact instead (e.g. "only X is
   supported" rather than "X not yet supported, see issue #N"). Only mention
   an issue number when explicitly asked to in that moment.
+- Doc comments don't justify an exported type/field by referencing how a
+  caller (e.g. a test) would use it ("exported so tests can construct one
+  directly and call Run, instead of driving the cobra command through its
+  flags"). State only what the type/struct holds and its current
+  structure — caller usage drifts out of date silently as the codebase
+  changes.
 
 ## Testing
 

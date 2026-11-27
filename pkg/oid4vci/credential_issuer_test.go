@@ -159,8 +159,9 @@ func TestEntityDataAccess(t *testing.T) {
 // the returned SD-JWT VC verifies against /jwks.json, discloses exactly
 // Alice's declared Vault KV claims (config/oid4vc-config.yml) with digests
 // that match, and binds the holder key the request proved possession of.
-// It also checks the jwt_vc_json sibling configuration is rejected, since
-// only dc+sd-jwt is supported at this endpoint.
+// It also checks the jwt_vc_json sibling configuration (same declared
+// claims) verifies against /jwks.json, carries them in credentialSubject,
+// and binds the same holder key.
 func TestIssueCredential(t *testing.T) {
 
 	cfg, err := co.GetAppConfig()
@@ -226,12 +227,40 @@ func TestIssueCredential(t *testing.T) {
 		require.Contains(t, sdDigests, digestDisclosure(disclosure))
 	}
 
-	// jwt_vc_json isn't supported at this endpoint.
+	// jwt_vc_json sibling configuration.
 	nonce, err = oauth.FetchNonce()
 	require.NoError(t, err)
 	proof = buildTestKeyProof(t, holderKey, cfg.OidcClient, testIssuer, nonce)
-	_, err = oauth.FetchCredential(token.AccessToken, "natural_person_jwt_0000", proof)
-	require.Error(t, err)
+	jwtVc, err := oauth.FetchCredential(token.AccessToken, "natural_person_jwt_0000", proof)
+	require.NoError(t, err)
+
+	jwtSig, err := jose.ParseSigned(jwtVc, []jose.SignatureAlgorithm{jose.ES256})
+	require.NoError(t, err)
+	jwtPayload, err := jwtSig.Verify(jwks.Keys[0].Key)
+	require.NoError(t, err)
+
+	var jwtClaims map[string]any
+	require.NoError(t, json.Unmarshal(jwtPayload, &jwtClaims))
+	require.Equal(t, testIssuer, jwtClaims["iss"])
+	require.Equal(t, co.UserAlice, jwtClaims["sub"])
+	require.NotNil(t, jwtClaims["nbf"])
+
+	jwtCnf, ok := jwtClaims["cnf"].(map[string]any)
+	require.True(t, ok)
+	jwtJwk, ok := jwtCnf["jwk"].(map[string]any)
+	require.True(t, ok)
+	require.NotContains(t, jwtJwk, "d", "cnf.jwk must carry the holder's public key only")
+
+	vc, ok := jwtClaims["vc"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, []any{"https://www.w3.org/2018/credentials/v1"}, vc["@context"])
+	require.Equal(t, []any{"VerifiableCredential", "NaturalPerson"}, vc["type"])
+
+	credentialSubject, ok := vc["credentialSubject"].(map[string]any)
+	require.True(t, ok)
+	for name, value := range wantClaims {
+		require.Equal(t, value, credentialSubject[name])
+	}
 }
 
 // TestIssueNonceAndVerifyKeyProof mints a c_nonce via IssueNonce, builds a
