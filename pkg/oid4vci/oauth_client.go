@@ -205,6 +205,40 @@ func (c *OAuthClient) FetchNonce() (string, error) {
 	return nonce.CNonce, nil
 }
 
+// RefreshToken redeems refreshToken at /token for a new TokenResponse,
+// identifying itself as c.clientId.
+func (c *OAuthClient) RefreshToken(refreshToken string) (*TokenResponse, error) {
+	form := url.Values{
+		"grant_type":    {"refresh_token"},
+		"client_id":     {c.clientId},
+		"refresh_token": {refreshToken},
+	}
+	req, err := http.NewRequest(http.MethodPost, c.baseUrl+"/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("refresh token: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("refresh token: read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("refresh token: %s: %s", resp.Status, body)
+	}
+
+	var token TokenResponse
+	if err := json.Unmarshal(body, &token); err != nil {
+		return nil, fmt.Errorf("refresh token: decode response: %w", err)
+	}
+	return &token, nil
+}
+
 // UserInfo fetches claims for accessToken from /userinfo.
 func (c *OAuthClient) UserInfo(accessToken string) (map[string]any, error) {
 	req, err := http.NewRequest(http.MethodGet, c.baseUrl+"/userinfo", nil)

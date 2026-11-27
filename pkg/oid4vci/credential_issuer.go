@@ -16,12 +16,13 @@ import (
 	"github.com/tdiesler/nessus-oid4vc-go/pkg/vault"
 )
 
-// Default lifetimes for issued authorization codes, access tokens, and
-// Credential Endpoint nonces.
+// Default lifetimes for issued authorization codes, access tokens, refresh
+// tokens, and Credential Endpoint nonces.
 const (
-	codeTTL  = 1 * time.Minute
-	tokenTTL = 5 * time.Minute
-	nonceTTL = 1 * time.Minute
+	codeTTL         = 1 * time.Minute
+	tokenTTL        = 5 * time.Minute
+	refreshTokenTTL = 30 * time.Minute
+	nonceTTL        = 1 * time.Minute
 )
 
 // keyProofType is the typ header OID4VCI requires on a holder's key-proof
@@ -198,20 +199,7 @@ func (ci *CredentialIssuer) ExchangeCode(code, clientId, redirectUri string) (*T
 	}
 
 	authorizationDetails := NewAuthorizationDetails(ci.cfg.CredentialConfigurationIdsForScope(session.Scope))
-
-	accessSession := NewSession(session.Subject, session.VaultToken, clientId, redirectUri, session.Scope, tokenTTL).
-		WithAuthorizationDetails(authorizationDetails)
-	accessToken, err := ci.sessions.IssueAccessToken(accessSession)
-	if err != nil {
-		return nil, err
-	}
-
-	idToken, err := ci.signIdToken(session.Subject, clientId)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewTokenResponse(accessToken, idToken, tokenTTL, authorizationDetails), nil
+	return ci.issueTokens(session.Subject, session.VaultToken, clientId, redirectUri, session.Scope, authorizationDetails)
 }
 
 // IssueCredential is the Credential Endpoint's core logic: it resolves
@@ -298,6 +286,22 @@ func (ci *CredentialIssuer) Logout(accessToken string) error {
 		return err
 	}
 	return vault.RevokeToken(session.VaultToken.Token)
+}
+
+// RefreshAccessToken redeems refreshToken for a new access token and a
+// rotated refresh token (RFC 6749 §6), re-validating against the same
+// client the original grant was issued to, and carries forward the same
+// authorization_details the original grant was issued.
+func (ci *CredentialIssuer) RefreshAccessToken(refreshToken, clientId string) (*TokenResponse, error) {
+	session, err := ci.sessions.RedeemRefreshToken(refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	if session.ClientId != clientId {
+		return nil, fmt.Errorf("refresh token was not issued for this client")
+	}
+
+	return ci.issueTokens(session.Subject, session.VaultToken, clientId, session.RedirectUri, session.Scope, session.AuthorizationDetails)
 }
 
 // ReadKeyValueClaims resolves accessToken back to the Vault token it was
@@ -433,6 +437,33 @@ func (ci *CredentialIssuer) assertClient(clientId, redirectUri string) (*Client,
 	return client, nil
 }
 
+// issueTokens mints a fresh access token, refresh token, and id_token for
+// subject/clientId/redirectUri/scope, bound to vaultToken and granting
+// authorizationDetails — the shared minting logic behind both ExchangeCode
+// and RefreshAccessToken.
+func (ci *CredentialIssuer) issueTokens(subject string, vaultToken *vault.AccessToken, clientId, redirectUri, scope string, authorizationDetails []AuthorizationDetail) (*TokenResponse, error) {
+	accessSession := NewSession(subject, vaultToken, clientId, redirectUri, scope, tokenTTL).
+		WithAuthorizationDetails(authorizationDetails)
+	accessToken, err := ci.sessions.IssueAccessToken(accessSession)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshSession := NewSession(subject, vaultToken, clientId, redirectUri, scope, refreshTokenTTL).
+		WithAuthorizationDetails(authorizationDetails)
+	refreshToken, err := ci.sessions.IssueRefreshToken(refreshSession)
+	if err != nil {
+		return nil, err
+	}
+
+	idToken, err := ci.signIdToken(subject, clientId)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewTokenResponse(accessToken, refreshToken, idToken, tokenTTL, authorizationDetails), nil
+}
+
 // signIdToken builds and signs a minimal OIDC id_token for subject,
 // audienced to clientId.
 func (ci *CredentialIssuer) signIdToken(subject, clientId string) (string, error) {
@@ -467,16 +498,18 @@ type TokenResponse struct {
 	AccessToken          string                `json:"access_token"`
 	TokenType            string                `json:"token_type"`
 	IdToken              string                `json:"id_token"`
+	RefreshToken         string                `json:"refresh_token,omitempty"`
 	ExpiresIn            int                   `json:"expires_in"`
 	AuthorizationDetails []AuthorizationDetail `json:"authorization_details,omitempty"`
 }
 
 // NewTokenResponse constructs a TokenResponse valid for ttl.
-func NewTokenResponse(accessToken, idToken string, ttl time.Duration, authorizationDetails []AuthorizationDetail) *TokenResponse {
+func NewTokenResponse(accessToken, refreshToken, idToken string, ttl time.Duration, authorizationDetails []AuthorizationDetail) *TokenResponse {
 	return &TokenResponse{
 		AccessToken:          accessToken,
 		TokenType:            "Bearer",
 		IdToken:              idToken,
+		RefreshToken:         refreshToken,
 		ExpiresIn:            int(ttl.Seconds()),
 		AuthorizationDetails: authorizationDetails,
 	}

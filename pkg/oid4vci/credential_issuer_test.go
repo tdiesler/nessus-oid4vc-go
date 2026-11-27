@@ -84,6 +84,7 @@ func TestOAuthAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, token.AccessToken)
 	require.NotEmpty(t, token.IdToken)
+	require.NotEmpty(t, token.RefreshToken)
 
 	jwks, err := oauth.FetchJWKS()
 	require.NoError(t, err)
@@ -91,6 +92,37 @@ func TestOAuthAuthorization(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, testIssuer, claims["iss"])
 	require.Equal(t, co.UserAlice, claims["sub"])
+}
+
+// TestRefreshAccessToken drives the refresh_token grant end to end over
+// real HTTP: redeeming a valid refresh token returns a working new access
+// token and a rotated refresh token carrying forward the same
+// authorization_details, and the now-spent original refresh token can't be
+// redeemed again.
+func TestRefreshAccessToken(t *testing.T) {
+
+	oauth, err := NewOAuthClient()
+	require.NoError(t, err)
+	oauth.WithScope("natural_person")
+
+	code, err := oauth.Authorize(co.UserAlice, co.UserPassword)
+	require.NoError(t, err)
+	original, err := oauth.ExchangeCode(code)
+	require.NoError(t, err)
+
+	refreshed, err := oauth.RefreshToken(original.RefreshToken)
+	require.NoError(t, err)
+	require.NotEmpty(t, refreshed.AccessToken)
+	require.NotEmpty(t, refreshed.RefreshToken)
+	require.NotEqual(t, original.AccessToken, refreshed.AccessToken)
+	require.NotEqual(t, original.RefreshToken, refreshed.RefreshToken)
+	require.Equal(t, original.AuthorizationDetails, refreshed.AuthorizationDetails)
+
+	_, err = oauth.UserInfo(refreshed.AccessToken)
+	require.NoError(t, err)
+
+	_, err = oauth.RefreshToken(original.RefreshToken)
+	require.Error(t, err, "a redeemed refresh token must not be usable again")
 }
 
 // TestLogout exercises Logout end-to-end: revoking the session's

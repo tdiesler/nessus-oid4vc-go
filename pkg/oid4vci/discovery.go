@@ -39,6 +39,6 @@ func NewMetadata(issuer string, cfg *co.AppConfig) *Metadata {
 		JwksUri:                issuer + "/jwks.json",
 		ScopesSupported:        scopesSupported,
 		ResponseTypesSupported: []string{"code"},
-		GrantTypesSupported:    []string{"authorization_code"},
+		GrantTypesSupported:    []string{"authorization_code", "refresh_token"},
 	}
 }

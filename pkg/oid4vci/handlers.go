@@ -2,6 +2,7 @@ package oid4vci
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -11,10 +12,11 @@ import (
 )
 
 // NewMux builds this authorization server's HTTP route table: discovery,
-// the Authorization Code flow's /authorize and /token endpoints, /userinfo,
-// /revoke, and the JWKS document /token's id_tokens verify against. This
-// file holds every HTTP-specific concern (routes, request/response
-// encoding), kept separate from CredentialIssuer's own protocol logic.
+// /authorize and /token (the Authorization Code and refresh_token grants),
+// /userinfo, /revoke, and the JWKS document /token's id_tokens verify
+// against. This file holds every HTTP-specific concern (routes,
+// request/response encoding), kept separate from CredentialIssuer's own
+// protocol logic.
 func NewMux(ci *CredentialIssuer) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", handleDiscovery(ci))
@@ -210,7 +212,16 @@ func handleToken(ci *CredentialIssuer) http.HandlerFunc {
 			return
 		}
 
-		token, err := ci.ExchangeCode(r.FormValue("code"), r.FormValue("client_id"), r.FormValue("redirect_uri"))
+		var token *TokenResponse
+		var err error
+		switch grantType := r.FormValue("grant_type"); grantType {
+		case "authorization_code":
+			token, err = ci.ExchangeCode(r.FormValue("code"), r.FormValue("client_id"), r.FormValue("redirect_uri"))
+		case "refresh_token":
+			token, err = ci.RefreshAccessToken(r.FormValue("refresh_token"), r.FormValue("client_id"))
+		default:
+			err = fmt.Errorf("unsupported grant_type %q", grantType)
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

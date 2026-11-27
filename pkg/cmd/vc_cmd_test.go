@@ -5,8 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	co "github.com/tdiesler/nessus-oid4vc-go/pkg/common"
+	"github.com/tdiesler/nessus-oid4vc-go/pkg/holder"
+	"github.com/tdiesler/nessus-oid4vc-go/pkg/oid4vci"
 )
 
 // TestDecodeDisclosure checks decodeDisclosure recovers an SD-JWT
@@ -54,6 +58,54 @@ func TestDigestDisclosure(t *testing.T) {
 func TestFormatDisclosure(t *testing.T) {
 	require.Equal(t, `["salt123", "email", alice@email.com]`, formatDisclosure([]any{"salt123", "email", "alice@email.com"}))
 	require.Equal(t, `["salt123", "verified", true]`, formatDisclosure([]any{"salt123", "verified", true}))
+}
+
+// TestVcGetRefreshesNearExpiryToken drives vc get against the vault
+// flavor with a near-expiry access token, confirming pkg/holder's existing
+// refreshSession/refreshToken path (see Wallet.GetCredential) redeems the
+// stored refresh token for a rotated one and still returns the credential
+// — now working against the vault flavor the same way it already does
+// against Keycloak.
+func TestVcGetRefreshesNearExpiryToken(t *testing.T) {
+	iss := holder.IssuerVault
+
+	snapshot := oid4vci.TakeWalletSnapshot(t, iss)
+	defer func() { _ = snapshot.Restore() }()
+
+	login := NewLoginOpts()
+	login.Issuer = iss
+	login.User = co.UserAlice
+	login.Password = co.UserPassword
+	login.Scope = "natural_person"
+	require.NoError(t, login.Run())
+
+	create := NewKeyCreateOpts()
+	create.Issuer = iss
+	create.User = co.UserAlice
+	require.NoError(t, create.Run())
+
+	w, err := holder.NewWallet(iss, co.UserAlice)
+	require.NoError(t, err)
+	conn := w.Issuer().Users[co.UserAlice]
+	require.NotNil(t, conn)
+	originalRefreshToken := conn.Token.RefreshToken
+	require.NotEmpty(t, originalRefreshToken)
+
+	conn.Token.ExpiresAt = time.Now()
+	require.NoError(t, w.Save())
+
+	get := NewVcGetOpts()
+	get.Issuer = iss
+	get.User = co.UserAlice
+	get.CredentialIdentifier = "natural_person_sd_0000"
+	require.NoError(t, get.Run())
+
+	w, err = holder.NewWallet(iss, co.UserAlice)
+	require.NoError(t, err)
+	conn = w.Issuer().Users[co.UserAlice]
+	require.NotNil(t, conn)
+	require.NotEqual(t, originalRefreshToken, conn.Token.RefreshToken, "refresh must rotate the stored refresh token")
+	require.False(t, conn.Token.Expired())
 }
 
 // Private ---------------------------------------------------------------------------------------------------------------

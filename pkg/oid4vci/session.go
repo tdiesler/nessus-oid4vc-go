@@ -54,22 +54,25 @@ func (s *Session) Expired() bool {
 
 // SessionStore ===================================================================================================================
 
-// SessionStore holds this authorization server's short-lived, in-memory state:
-// issued authorization codes (single-use) and issued access tokens, each
-// mapping back to a Session. Purely in-process — restarting the service
-// invalidates every outstanding code/token, which is acceptable for this
-// POC.
+// SessionStore holds this authorization server's short-lived, in-memory
+// state: issued authorization codes (single-use), access tokens, and
+// refresh tokens (single-use — redeeming one rotates it, RFC 6749 §6),
+// each mapping back to a Session. Purely in-process — restarting the
+// service invalidates every outstanding code/token, which is acceptable
+// for this POC.
 type SessionStore struct {
-	mu     sync.Mutex
-	codes  map[string]*Session
-	tokens map[string]*Session
+	mu            sync.Mutex
+	codes         map[string]*Session
+	tokens        map[string]*Session
+	refreshTokens map[string]*Session
 }
 
 // NewSessionStore constructs an empty SessionStore.
 func NewSessionStore() *SessionStore {
 	return &SessionStore{
-		codes:  map[string]*Session{},
-		tokens: map[string]*Session{},
+		codes:         map[string]*Session{},
+		tokens:        map[string]*Session{},
+		refreshTokens: map[string]*Session{},
 	}
 }
 
@@ -102,6 +105,20 @@ func (s *SessionStore) IssueCode(session *Session) (string, error) {
 	return code, nil
 }
 
+// IssueRefreshToken stores session under a fresh, random refresh token and
+// returns it.
+func (s *SessionStore) IssueRefreshToken(session *Session) (string, error) {
+	token, err := randomToken()
+	if err != nil {
+		return "", err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refreshTokens[token] = session
+	return token, nil
+}
+
 // RedeemCode looks up and deletes code's Session — single-use, as an
 // authorization code must be (RFC 6749 §4.1.2).
 func (s *SessionStore) RedeemCode(code string) (*Session, error) {
@@ -112,6 +129,21 @@ func (s *SessionStore) RedeemCode(code string) (*Session, error) {
 	delete(s.codes, code)
 	if !ok || session.Expired() {
 		return nil, fmt.Errorf("invalid or expired authorization code")
+	}
+	return session, nil
+}
+
+// RedeemRefreshToken looks up and deletes refreshToken's Session —
+// single-use, so a caller must store the rotated refresh token a
+// subsequent IssueRefreshToken call returns (RFC 6749 §6).
+func (s *SessionStore) RedeemRefreshToken(refreshToken string) (*Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.refreshTokens[refreshToken]
+	delete(s.refreshTokens, refreshToken)
+	if !ok || session.Expired() {
+		return nil, fmt.Errorf("invalid or expired refresh token")
 	}
 	return session, nil
 }
