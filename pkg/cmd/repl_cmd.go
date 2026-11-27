@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -113,12 +115,26 @@ func newReplCommandTree() *cobra.Command {
 	return cmd
 }
 
-// replCompleter builds a readline tab-completer mirroring newReplCommandTree's
-// command names, recursively through every level of subcommand — so typing
-// e.g. "show c" and pressing Tab offers every show subcommand starting
-// with "c".
-func replCompleter() *readline.PrefixCompleter {
-	return readline.NewPrefixCompleter(completerItems(newReplCommandTree())...)
+// replCompleter drives readline's tab-completion through cobra's own
+// hidden "__complete" shell-completion command, run against a fresh
+// command tree (see newReplCommandTree) on every request. This offers
+// command/subcommand names, a command's own flag names once typing "--",
+// and any flag's registered value completions (see completion.go) — e.g.
+// "login --user " completes to the issuer's known usernames.
+func replCompleter() readline.AutoCompleter {
+	return readline.SegmentFunc(func(segments [][]rune, pos int) [][]rune {
+		words := make([]string, len(segments))
+		for i, segment := range segments {
+			words[i] = string(segment)
+		}
+
+		candidates := cobraCompletions(words)
+		runes := make([][]rune, len(candidates))
+		for i, candidate := range candidates {
+			runes[i] = []rune(candidate)
+		}
+		return runes
+	})
 }
 
 // runReplLine tokenizes line by whitespace and runs it against a fresh
@@ -191,13 +207,27 @@ func printReplHistory(history []string) {
 	}
 }
 
-// completerItems builds one readline.PrefixCompleterInterface per direct
-// subcommand of cmd, each recursively carrying its own subcommands.
-func completerItems(cmd *cobra.Command) []readline.PrefixCompleterInterface {
-	children := cmd.Commands()
-	items := make([]readline.PrefixCompleterInterface, 0, len(children))
-	for _, child := range children {
-		items = append(items, readline.PcItem(child.Name(), completerItems(child)...))
+// cobraCompletions returns the full candidate words cobra's hidden
+// "__complete" command offers for words — the REPL line tokenized by
+// whitespace, its last entry being the partial word under the cursor (or
+// "" immediately after a trailing space).
+func cobraCompletions(words []string) []string {
+	cmd := newReplCommandTree()
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs(append([]string{cobra.ShellCompRequestCmd}, words...))
+	_ = cmd.Execute()
+
+	var completions []string
+	for _, line := range strings.Split(out.String(), "\n") {
+		if line == "" || strings.HasPrefix(line, ":") {
+			continue
+		}
+		completions = append(completions, strings.SplitN(line, "\t", 2)[0])
 	}
-	return items
+	return completions
 }

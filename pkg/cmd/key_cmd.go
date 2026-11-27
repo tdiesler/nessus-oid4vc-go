@@ -63,5 +63,6 @@ func NewKeyCreateCmd() *cobra.Command {
 	bindRootOpts(cmd, &opts.RootOpts)
 	cmd.Flags().StringVar(&opts.Name, "name", "", "Key name (auto-derived if not given)")
 	cmd.Flags().StringVar(&opts.User, "user", "", "Target user (default: the issuer's default user)")
+	_ = cmd.RegisterFlagCompletionFunc("user", completeUsername)
 	return cmd
 }

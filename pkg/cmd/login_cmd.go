@@ -80,5 +80,8 @@ func NewLoginCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.Password, "password", "", "Password (prompted if not given, headless mode only)")
 	cmd.Flags().StringVar(&opts.Scope, "scope", opts.Scope, "OAuth scope")
 	cmd.Flags().BoolVar(&opts.Browser, "browser", false, "Open the system browser for login instead of driving it headlessly")
+	_ = cmd.RegisterFlagCompletionFunc("client", completeClientId)
+	_ = cmd.RegisterFlagCompletionFunc("user", completeUsername)
+	_ = cmd.RegisterFlagCompletionFunc("scope", completeScope)
 	return cmd
 }

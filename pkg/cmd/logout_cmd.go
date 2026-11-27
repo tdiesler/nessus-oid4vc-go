@@ -53,5 +53,6 @@ func NewLogoutCmd() *cobra.Command {
 	}
 	bindRootOpts(cmd, &opts.RootOpts)
 	cmd.Flags().StringVar(&opts.User, "user", "", "Username to log out (default: the issuer's default user)")
+	_ = cmd.RegisterFlagCompletionFunc("user", completeUsername)
 	return cmd
 }

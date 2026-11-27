@@ -71,6 +71,9 @@ func NewVcGetCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.CredentialIdentifier, "credential-identifier", "", "Credential identifier from authorization_details")
 	cmd.Flags().StringVar(&opts.Key, "key", "", "Holder key name (defaults to the connection's default key)")
 	cmd.Flags().StringVar(&opts.User, "user", "", "Username (default: the issuer's default user)")
+	_ = cmd.RegisterFlagCompletionFunc("credential-identifier", completeCredentialIdentifier)
+	_ = cmd.RegisterFlagCompletionFunc("key", completeHolderKey)
+	_ = cmd.RegisterFlagCompletionFunc("user", completeUsername)
 	return cmd
 }
 

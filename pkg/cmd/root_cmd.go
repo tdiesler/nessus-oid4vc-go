@@ -49,4 +49,5 @@ func NewRootCmd() *cobra.Command {
 // parses a command's flags before RunE runs.
 func bindRootOpts(cmd *cobra.Command, root *RootOpts) {
 	cmd.Flags().StringVar(&root.Issuer, "issuer", "", "Issuer alias to operate against (default: the holder's default issuer)")
+	_ = cmd.RegisterFlagCompletionFunc("issuer", completeIssuerAlias)
 }
